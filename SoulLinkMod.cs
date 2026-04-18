@@ -1,0 +1,57 @@
+using System;
+using System.Linq;
+using System.Reflection;
+using Godot;
+using HarmonyLib;
+using MegaCrit.Sts2.Core.Modding;
+
+namespace SoulLinkMod;
+
+[ModInitializer(nameof(Initialize))]
+public static class SoulLinkMod
+{
+    public const string Id = "soullink";
+
+    /// <summary>
+    /// Set to true while SoulLinkSession.ApplyToAllPlayers() is writing canonical
+    /// values back to player objects, preventing the sync patches from re-firing.
+    /// </summary>
+    public static bool ApplyingCanonical { get; set; }
+
+    public static void Initialize()
+    {
+        try
+        {
+            var harmony = new Harmony(Id);
+
+            Type[] types;
+            try
+            {
+                types = Assembly.GetExecutingAssembly().GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types.Where(t => t != null).ToArray()!;
+                GD.PrintErr($"[SoulLink] {ex.LoaderExceptions.Length} type(s) failed to load — continuing with {types.Length} loaded.");
+            }
+
+            foreach (var type in types)
+            {
+                try
+                {
+                    harmony.CreateClassProcessor(type).Patch();
+                }
+                catch (Exception ex)
+                {
+                    GD.PrintErr($"[SoulLink] Failed to patch {type.Name}: {ex}");
+                }
+            }
+
+            GD.Print("[SoulLink] Initialized.");
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[SoulLink] Initialize() crashed: {ex}");
+        }
+    }
+}
