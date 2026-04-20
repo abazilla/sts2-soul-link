@@ -173,6 +173,16 @@ public static class SoulLinkSession
     // ── Apply Gold delta ──────────────────────────────────────────────────────
 
     /// <summary>
+    /// Sets canonical gold directly to the given value without computing a delta or logging.
+    /// Called by the SoulLinkGoldSyncMessage handler on the receiving peer so it mirrors
+    /// the sender's canonical value without double-counting.
+    /// </summary>
+    public static void SetGoldDirect(int canonical)
+    {
+        Gold = Math.Max(0, canonical);
+    }
+
+    /// <summary>
     /// Called from GoldSyncPatch. Updates the canonical gold pool.
     /// If blocked (e.g. Ectoplasm), the delta is logged but NOT applied.
     /// Returns the canonical gold value that should actually be written.

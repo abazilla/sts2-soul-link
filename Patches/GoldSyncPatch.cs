@@ -5,6 +5,7 @@ using SoulLinkMod.UI;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 
 namespace SoulLinkMod.Patches;
 
@@ -71,6 +72,12 @@ public static class GoldSyncPatch
         {
             SoulLinkMod.ApplyingCanonical = false;
         }
+
+        // Broadcast the canonical gold to the other process via STS2's message system.
+        // SoulLinkGoldSyncMessage is auto-registered because STS2 scans mod assemblies
+        // for INetMessage implementations (ReflectionHelper.GetSubtypesInMods).
+        RunManager.Instance?.NetService?.SendMessage(
+            new SoulLinkGoldSyncMessage { CanonicalGold = canonical });
 
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
