@@ -58,17 +58,42 @@ public static class SoulLinkSession
         foreach (var p in runState.Players)
             GD.Print($"[SoulLink] Player {p.Character.GetType().Name}: Character.StartingHp={p.Character.StartingHp}, Creature.MaxHp={p.Creature.MaxHp}, Creature.CurrentHp={p.Creature.CurrentHp}");
 
-        // Use Character.StartingHp (the canonical MaxHp from the data) rather than
-        // Creature.MaxHp, which may be uninitialized (0) on the host at Launch() time.
-        int sharedMaxHp = (int)Math.Floor(Average(runState.Players, p => p.Character.StartingHp));
+        // On a fresh run, Creature.MaxHp may be 0 on the host at Launch() time — fall back
+        // to Character.StartingHp (the static data value) in that case.
+        // On a save-load, Creature.MaxHp holds the saved value with accumulated in-run gains.
+        static int BestMaxHp(Player p) =>
+            p.Creature.MaxHp > 0 ? p.Creature.MaxHp : p.Character.StartingHp;
 
-        // A2: Ancients (including Neow) only heal 80% of missing HP, so the effective
-        // starting CurrentHp is floor(MaxHp * 0.8) — matches all characters except Defect
-        // (formula gives 60, but Defect A2 is 56 — verify if this matters in practice).
-        bool isA2 = runState.AscensionLevel >= 2;
-        int sharedCurrentHp = isA2
-            ? (int)Math.Floor(sharedMaxHp * 0.8)
-            : sharedMaxHp;
+        // Detect save-load: on a fresh run Creature.CurrentHp is 0 for all players (not yet set).
+        // On a save-load the game restores it from disk so at least one player has CurrentHp > 0.
+        // A run cannot be saved at 0 HP (game over), so this check is safe.
+        bool isSaveLoad = false;
+        foreach (var p in runState.Players)
+        {
+            if (p.Creature.CurrentHp > 0) { isSaveLoad = true; break; }
+        }
+
+        int sharedMaxHp = (int)Math.Floor(Average(runState.Players, p => (double)BestMaxHp(p)));
+
+        int sharedCurrentHp;
+        if (isSaveLoad)
+        {
+            // Restore CurrentHp from save. All players should have the same HP due to soul link,
+            // but average in case of any transient divergence. Fall back to MaxHp if 0.
+            sharedCurrentHp = (int)Math.Floor(Average(runState.Players,
+                p => (double)(p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p))));
+            GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
+        }
+        else
+        {
+            // A2: Ancients (including Neow) only heal 80% of missing HP, so the effective
+            // starting CurrentHp is floor(MaxHp * 0.8) — matches all characters except Defect
+            // (formula gives 60, but Defect A2 is 56 — verify if this matters in practice).
+            bool isA2 = runState.AscensionLevel >= 2;
+            sharedCurrentHp = isA2
+                ? (int)Math.Floor(sharedMaxHp * 0.8)
+                : sharedMaxHp;
+        }
 
         int sharedGold = runState.Players[0].Gold;  // all players start with the same gold
 
