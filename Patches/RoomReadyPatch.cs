@@ -7,9 +7,10 @@ using SoulLinkMod.UI;
 namespace SoulLinkMod.Patches;
 
 /// <summary>
-/// Hooks NCombatRoom._Ready to inject CombatLogPanel.
-/// Hooks _ExitTree on NCombatRoom to clear the panel reference.
-/// Hooks each confirmed non-combat room's _Ready to inject RunStatsPanel.
+/// Hooks NCombatRoom._Ready to inject CombatLogPanel and DebugOverlay.
+/// Hooks _ExitTree on NCombatRoom to clear panel references.
+/// Hooks each confirmed non-combat room's _Ready to inject RunStatsPanel and DebugOverlay.
+/// Hooks _ExitTree on non-combat rooms to clear DebugOverlay reference.
 ///
 /// Confirmed room class names (MegaCrit.Sts2.Core.Nodes.Rooms):
 ///   NCombatRoom, NMapRoom, NEventRoom, NRestSiteRoom, NTreasureRoom, NMerchantRoom
@@ -29,9 +30,17 @@ public static class CombatRoomReadyPatch
     {
         if (!SoulLinkSession.IsActive) return;
 
-        var panel = new CombatLogPanel();
-        __instance.AddChild(panel);
-        panel.Initialize();
+        var combatLog = new CombatLogPanel();
+        __instance.AddChild(combatLog);
+        combatLog.Initialize();
+
+        var stats = new RunStatsPanel();
+        __instance.AddChild(stats);
+        stats.Initialize();
+
+        var debug = new DebugOverlay();
+        __instance.AddChild(debug);
+        debug.Initialize();
     }
 }
 
@@ -45,7 +54,12 @@ public static class CombatRoomExitPatch
     }
 
     [HarmonyPostfix]
-    static void Postfix() => CombatLogPanel.Clear();
+    static void Postfix()
+    {
+        CombatLogPanel.Clear();
+        RunStatsPanel.Clear();
+        DebugOverlay.Clear();
+    }
 }
 
 [HarmonyPatch]
@@ -59,7 +73,7 @@ public static class NonCombatRoomReadyPatch
             var type = AccessTools.TypeByName($"{ns}.{name}");
             if (type == null)
             {
-                GD.PrintErr($"[SoulLink] Room type {name} not found — RunStatsPanel won't appear there.");
+                GD.PrintErr($"[SoulLink] Room type {name} not found — panels won't appear there.");
                 continue;
             }
             var m = AccessTools.Method(type, "_Ready");
@@ -72,8 +86,35 @@ public static class NonCombatRoomReadyPatch
     {
         if (!SoulLinkSession.IsActive) return;
 
-        var panel = new RunStatsPanel();
-        __instance.AddChild(panel);
-        panel.Initialize();
+        var stats = new RunStatsPanel();
+        __instance.AddChild(stats);
+        stats.Initialize();
+
+        var debug = new DebugOverlay();
+        __instance.AddChild(debug);
+        debug.Initialize();
+    }
+}
+
+[HarmonyPatch]
+public static class NonCombatRoomExitPatch
+{
+    static IEnumerable<MethodBase> TargetMethods()
+    {
+        const string ns = "MegaCrit.Sts2.Core.Nodes.Rooms";
+        foreach (var name in new[] { "NMapRoom", "NEventRoom", "NRestSiteRoom", "NTreasureRoom", "NMerchantRoom" })
+        {
+            var type = AccessTools.TypeByName($"{ns}.{name}");
+            if (type == null) continue;
+            var m = AccessTools.Method(type, "_ExitTree");
+            if (m != null) yield return m;
+        }
+    }
+
+    [HarmonyPostfix]
+    static void Postfix()
+    {
+        RunStatsPanel.Clear();
+        DebugOverlay.Clear();
     }
 }

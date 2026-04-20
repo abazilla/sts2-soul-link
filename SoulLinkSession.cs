@@ -73,7 +73,7 @@ public static class SoulLinkSession
             if (p.Creature.CurrentHp > 0) { isSaveLoad = true; break; }
         }
 
-        int sharedMaxHp = (int)Math.Floor(Average(runState.Players, p => (double)BestMaxHp(p)));
+        int sharedMaxHp = (int)Math.Floor(Average(runState.Players, p => BestMaxHp(p)));
 
         int sharedCurrentHp;
         if (isSaveLoad)
@@ -81,7 +81,7 @@ public static class SoulLinkSession
             // Restore CurrentHp from save. All players should have the same HP due to soul link,
             // but average in case of any transient divergence. Fall back to MaxHp if 0.
             sharedCurrentHp = (int)Math.Floor(Average(runState.Players,
-                p => (double)(p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p))));
+                p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p)));
             GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
         }
         else
@@ -101,11 +101,15 @@ public static class SoulLinkSession
         CurrentHp = sharedCurrentHp;
         Gold      = sharedGold;
 
-        _log.Clear();
-        TotalDamageTaken   = 0;
-        TotalHealingGained = 0;
-        TotalGoldEarned    = 0;
-        TotalGoldSpent     = 0;
+        // On a save-load keep cumulative totals — the run is continuing, not starting fresh.
+        if (!isSaveLoad)
+        {
+            _log.Clear();
+            TotalDamageTaken   = 0;
+            TotalHealingGained = 0;
+            TotalGoldEarned    = 0;
+            TotalGoldSpent     = 0;
+        }
 
         // Write canonical values before activating so no patch intercepts the initial write.
         ApplyToAllPlayers(runState);

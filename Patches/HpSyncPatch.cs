@@ -71,5 +71,7 @@ public static class HpSyncPatch
         }
 
         CombatLogPanel.Current?.Refresh();
+        RunStatsPanel.Current?.Refresh();
+        DebugOverlay.Current?.Refresh();
     }
 }

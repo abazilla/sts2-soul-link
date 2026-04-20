@@ -69,5 +69,7 @@ public static class MaxHpSyncPatch
         }
 
         CombatLogPanel.Current?.Refresh();
+        RunStatsPanel.Current?.Refresh();
+        DebugOverlay.Current?.Refresh();
     }
 }

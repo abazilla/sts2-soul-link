@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
+using SoulLinkMod.UI;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
@@ -70,5 +71,8 @@ public static class GoldSyncPatch
         {
             SoulLinkMod.ApplyingCanonical = false;
         }
+
+        RunStatsPanel.Current?.Refresh();
+        DebugOverlay.Current?.Refresh();
     }
 }

@@ -1,21 +1,25 @@
 using System;
 using Godot;
-using MegaCrit.Sts2.Core.Combat;
-using MegaCrit.Sts2.Core.Nodes.Rooms;
 
 namespace SoulLinkMod.UI;
 
 /// <summary>
-/// Collapsible run-stats panel shown outside of combat (map, rest, shop, events).
-/// Displays cumulative damage taken, healing gained, gold earned, and gold spent
-/// for the entire Soul Link run so far.
+/// Collapsible run-stats panel showing cumulative damage taken, healing gained,
+/// gold earned, and gold spent for the entire Soul Link run.
 ///
-/// Added as a child of the non-combat room node by RoomReadyPatch.
-/// Hides itself when combat is in progress.
+/// Added as a child of both combat and non-combat room nodes by RoomReadyPatch.
+/// Panel position persists across room transitions via static saved offsets.
 /// </summary>
 public class RunStatsPanel : Control
 {
     public static RunStatsPanel? Current;
+
+    private const float PanelW = 210f;
+    private const float PanelH = 160f;
+
+    // Persists position across room transitions (static survives node destruction).
+    private static float _savedLeft = 10f;
+    private static float _savedTop  = -80f;
 
     private bool _expanded = true;
     private Button? _toggleButton;
@@ -24,6 +28,10 @@ public class RunStatsPanel : Control
     private Label? _healLbl;
     private Label? _goldEarnedLbl;
     private Label? _goldSpentLbl;
+
+    private bool _dragging;
+    private Vector2 _dragStart;
+    private Vector2 _posStart;
 
     private static readonly Color ColorDamage   = new(1f,   0.2f, 0.2f, 1f);
     private static readonly Color ColorHeal     = new(0.2f, 1f,   0.3f, 1f);
@@ -38,13 +46,15 @@ public class RunStatsPanel : Control
         {
             Current = this;
 
-            // Anchor to top-left.
             AnchorLeft = 0f; AnchorRight  = 0f;
-            AnchorTop  = 0f; AnchorBottom = 0f;
-            OffsetLeft = 10; OffsetTop    = 10;
-            OffsetRight= 220; OffsetBottom = 150;
+            AnchorTop  = 0.5f; AnchorBottom = 0.5f;
+            OffsetLeft   = _savedLeft;
+            OffsetTop    = _savedTop;
+            OffsetRight  = _savedLeft + PanelW;
+            OffsetBottom = _savedTop  + PanelH;
 
             MouseFilter = MouseFilterEnum.Pass;
+            SetProcess(true);
 
             BuildUI();
             Refresh();
@@ -69,9 +79,11 @@ public class RunStatsPanel : Control
     {
         var bg = new PanelContainer();
         bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        bg.MouseFilter = MouseFilterEnum.Pass;
         AddChild(bg);
 
         var vbox = new VBoxContainer();
+        vbox.MouseFilter = MouseFilterEnum.Pass;
         bg.AddChild(vbox);
 
         _toggleButton = new Button { Text = "Run Stats −" };
@@ -79,6 +91,7 @@ public class RunStatsPanel : Control
         vbox.AddChild(_toggleButton);
 
         _statsContainer = new VBoxContainer();
+        _statsContainer.MouseFilter = MouseFilterEnum.Pass;
         vbox.AddChild(_statsContainer);
 
         _damageLbl    = MakeStatLabel();
@@ -93,19 +106,13 @@ public class RunStatsPanel : Control
     }
 
     private static Label MakeStatLabel()
-    {
-        var lbl = new Label();
-        lbl.HorizontalAlignment = HorizontalAlignment.Left;
-        return lbl;
-    }
+        => new() { HorizontalAlignment = HorizontalAlignment.Left };
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
     private void DoRefresh()
     {
-        // Hide during combat — the combat log panel takes over.
-        bool inCombat = CombatManager.Instance.IsInProgress;
-        Visible = SoulLinkSession.IsActive && !inCombat;
+        Visible = SoulLinkSession.IsActive;
         if (!Visible) return;
 
         if (_damageLbl    != null) SetStat(_damageLbl,     "Damage taken",  SoulLinkSession.TotalDamageTaken,   ColorDamage);
@@ -122,7 +129,7 @@ public class RunStatsPanel : Control
 
     private static void SetStat(Label lbl, string label, int value, Color color)
     {
-        lbl.Text              = $"{label}:  {value}";
+        lbl.Text = $"{label}:  {value}";
         lbl.AddThemeColorOverride("font_color", color);
     }
 
@@ -130,5 +137,51 @@ public class RunStatsPanel : Control
     {
         _expanded = !_expanded;
         Refresh();
+    }
+
+    // ── Drag (polled via _Process) ────────────────────────────────────────────
+    // _Input and _GuiInput don't fire reliably when the game captures input first.
+    // Polling Input.IsMouseButtonPressed in _Process is more robust.
+
+    public override void _Process(double _delta)
+    {
+        try { HandleDrag(); }
+        catch { /* don't let drag errors crash the panel */ }
+    }
+
+    private void HandleDrag()
+    {
+        var viewport = GetViewport();
+        if (viewport == null) return;
+
+        var mousePos  = viewport.GetMousePosition();
+        bool mouseDown = Input.IsMouseButtonPressed(MouseButton.Left);
+
+        if (!_dragging && mouseDown)
+        {
+            bool inPanel  = GetGlobalRect().HasPoint(mousePos);
+            bool onButton = _toggleButton != null && _toggleButton.GetGlobalRect().HasPoint(mousePos);
+            if (inPanel && !onButton)
+            {
+                _dragging  = true;
+                _dragStart = mousePos;
+                _posStart  = new Vector2(OffsetLeft, OffsetTop);
+            }
+        }
+        else if (_dragging && !mouseDown)
+        {
+            _dragging  = false;
+            _savedLeft = OffsetLeft;
+            _savedTop  = OffsetTop;
+        }
+
+        if (_dragging)
+        {
+            var d = mousePos - _dragStart;
+            OffsetLeft   = _posStart.X + d.X;
+            OffsetTop    = _posStart.Y + d.Y;
+            OffsetRight  = OffsetLeft + PanelW;
+            OffsetBottom = OffsetTop  + PanelH;
+        }
     }
 }
