@@ -51,6 +51,9 @@ public static class MaxHpSyncPatch
         value = SoulLinkSession.MaxHp;
 
         // Write canonical MaxHp and CurrentHp to all other players.
+        // The triggering creature gets MaxHp via the redirected `value` above.
+        // Its CurrentHp will be updated by the follow-up CurrentHp write the game fires
+        // immediately after (the heal equal to the MaxHp gain), intercepted by HpSyncPatch.
         SoulLinkMod.ApplyingCanonical = true;
         try
         {

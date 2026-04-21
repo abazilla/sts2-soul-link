@@ -5,3 +5,4 @@ deploy.sh
 read-client-log.sh
 .deploy-count
 BuildInfo.cs
+.buglogs/

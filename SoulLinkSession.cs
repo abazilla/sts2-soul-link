@@ -27,6 +27,14 @@ public static class SoulLinkSession
     public static int MaxHp      { get; private set; }
     public static int Gold       { get; private set; }
 
+    // ── MaxHP heal coordination ───────────────────────────────────────────────
+
+    // When MaxHP increases, the game fires a follow-up CurrentHp write whose delta
+    // equals the already-scaled MaxHp gain. We store that amount here so ApplyHpDelta
+    // can apply it directly without scaling it a second time.
+    // Cleared on every ApplyHpDelta call to prevent stale values across events.
+    private static int _pendingMaxHpHeal;
+
     // ── Change log ────────────────────────────────────────────────────────────
 
     private const int LogCapacity = 10;
@@ -119,10 +127,11 @@ public static class SoulLinkSession
     /// <summary>Called when the run ends (win or loss). Clears all state.</summary>
     public static void OnRunEnd()
     {
-        IsActive  = false;
-        CurrentHp = 0;
-        MaxHp     = 0;
-        Gold      = 0;
+        IsActive         = false;
+        CurrentHp        = 0;
+        MaxHp            = 0;
+        Gold             = 0;
+        _pendingMaxHpHeal = 0;
         _log.Clear();
         TotalDamageTaken   = 0;
         TotalHealingGained = 0;
@@ -140,12 +149,27 @@ public static class SoulLinkSession
     /// </summary>
     public static int ApplyHpDelta(int rawDelta, bool inCombat, int playerCount, int playerSlot, string? source = null)
     {
+        int pendingHeal = _pendingMaxHpHeal;
+        _pendingMaxHpHeal = 0;  // always consume — prevents stale values leaking across events
+
         int delta = rawDelta;
 
-        // Scale out-of-combat heals by 1/playerCount so rest/events don't
-        // become N× more powerful in multiplayer.
-        if (delta > 0 && !inCombat && playerCount > 1)
-            delta = Math.Max(1, delta / playerCount);
+        if (delta > 0 && !inCombat)
+        {
+            if (pendingHeal > 0)
+            {
+                // This heal is the follow-up to a MaxHP gain. The game already computed
+                // the delta using our redirected (scaled) MaxHp value, so the amount is
+                // already correct — don't scale it again.
+                delta = pendingHeal;
+            }
+            else if (playerCount > 1)
+            {
+                // Normal out-of-combat heal: scale by 1/playerCount so rest/events don't
+                // become N× more powerful in multiplayer.
+                delta = Math.Max(1, delta / playerCount);
+            }
+        }
 
         CurrentHp = Math.Clamp(CurrentHp + delta, 0, MaxHp);
 
@@ -164,8 +188,15 @@ public static class SoulLinkSession
         if (delta > 0 && !inCombat && playerCount > 1)
             scaledDelta = Math.Max(1, delta / playerCount);
 
-        MaxHp     = Math.Max(1, MaxHp + scaledDelta);
+        MaxHp = Math.Max(1, MaxHp + scaledDelta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
+
+        // When MaxHP increases, the game fires a follow-up CurrentHp write equal to
+        // the scaled delta (it reads back the already-redirected MaxHp value to compute
+        // the heal amount). Mark that the next out-of-combat heal should NOT be scaled
+        // a second time — it's already been scaled here.
+        if (scaledDelta > 0)
+            _pendingMaxHpHeal = scaledDelta;
 
         AddEntry(new LogEntry(LogEntryType.Health, playerSlot, 0, scaledDelta, source));
     }
