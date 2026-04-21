@@ -27,13 +27,25 @@ public static class SoulLinkSession
     public static int MaxHp      { get; private set; }
     public static int Gold       { get; private set; }
 
-    // ── MaxHP heal coordination ───────────────────────────────────────────────
+    // ── HP heal coordination ──────────────────────────────────────────────────
 
     // When MaxHP increases, the game fires a follow-up CurrentHp write whose delta
     // equals the already-scaled MaxHp gain. We store that amount here so ApplyHpDelta
     // can apply it directly without scaling it a second time.
     // Cleared on every ApplyHpDelta call to prevent stale values across events.
     private static int _pendingMaxHpHeal;
+
+    // True once the first combat has started. Before this point we are in the
+    // "initialization phase" (Neow's heal, game startup), where out-of-combat
+    // heals must NOT be divided by player count — Neow only fires once, not per player.
+    // After the first combat, campfire/event heals fire once per player, so scaling applies.
+    private static bool _initPhaseComplete;
+
+    // HealInternal receives the unclamped heal amount before SetCurrentHpInternal clamps it
+    // to MaxHp. We stash it here so ApplyHpDelta can scale the true intended heal rather
+    // than the already-clamped delta that arrives via the CurrentHp setter.
+    // Cleared on every ApplyHpDelta call to prevent stale values across events.
+    public static int PendingUnclampedHeal { get; set; }
 
     // ── Change log ────────────────────────────────────────────────────────────
 
@@ -72,35 +84,54 @@ public static class SoulLinkSession
         static int BestMaxHp(Player p) =>
             p.Creature.MaxHp > 0 ? p.Creature.MaxHp : p.Character.StartingHp;
 
-        // Detect save-load: on a fresh run Creature.CurrentHp is 0 for all players (not yet set).
-        // On a save-load the game restores it from disk so at least one player has CurrentHp > 0.
-        // A run cannot be saved at 0 HP (game over), so this check is safe.
-        bool isSaveLoad = false;
-        foreach (var p in runState.Players)
+        // Detect save-load vs fresh run.
+        // The game pre-initializes all creatures to MaxHp before Launch() fires, even on a
+        // brand-new run, so "CurrentHp > 0" is not a reliable fresh-run signal.
+        // Instead we combine two checks:
+        //   1. Any player has CurrentHp < MaxHp (they took damage since run start), OR
+        //      MaxHp > Character.StartingHp (max-HP upgrades were obtained).
+        //   2. Gold is no longer the starting amount (99) — meaning Neow or combat has fired.
+        // A fresh run passes both tests (all players at full base HP, gold still 99).
+        // A mid-run save fails at least one of them.
+        const int StartingGold = 99;
+        bool isSaveLoad = runState.Players[0].Gold != StartingGold;
+        if (!isSaveLoad)
         {
-            if (p.Creature.CurrentHp > 0) { isSaveLoad = true; break; }
+            foreach (var p in runState.Players)
+            {
+                int chp = p.Creature.CurrentHp;
+                int mhp = BestMaxHp(p);
+                if ((chp > 0 && chp < mhp) || mhp > p.Character.StartingHp)
+                {
+                    isSaveLoad = true;
+                    break;
+                }
+            }
         }
 
-        int sharedMaxHp = (int)Math.Floor(Average(runState.Players, p => BestMaxHp(p)));
+        int sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
 
         int sharedCurrentHp;
         if (isSaveLoad)
         {
             // Restore CurrentHp from save. All players should have the same HP due to soul link,
             // but average in case of any transient divergence. Fall back to MaxHp if 0.
-            sharedCurrentHp = (int)Math.Floor(Average(runState.Players,
-                p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p)));
+            sharedCurrentHp = RoundedAverage(runState.Players,
+                p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
             GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
+            // A save-load implies the run is past initialization — combat has already happened.
+            _initPhaseComplete = true;
         }
         else
         {
-            // A2: Ancients (including Neow) only heal 80% of missing HP, so the effective
-            // starting CurrentHp is floor(MaxHp * 0.8) — matches all characters except Defect
-            // (formula gives 60, but Defect A2 is 56 — verify if this matters in practice).
-            bool isA2 = runState.AscensionLevel >= 2;
-            sharedCurrentHp = isA2
-                ? (int)Math.Floor(sharedMaxHp * 0.8)
-                : sharedMaxHp;
+            // Fresh run: the game pre-initializes creatures to full HP, so we match that.
+            // Neow will immediately reset HP to 0 then heal to the ascension-scaled value
+            // (e.g. 64 for A2 Ironclad). During _initPhaseComplete=false, those heals are
+            // applied without playerCount scaling — Neow fires per-player but the reset+heal
+            // pairs resolve correctly to the intended starting HP.
+            sharedCurrentHp = sharedMaxHp;
+            _initPhaseComplete = false;
+            GD.Print($"[SoulLink] Fresh run — init phase active. MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp} (Neow will adjust to ascension-scaled value).");
         }
 
         int sharedGold = runState.Players[0].Gold;  // all players start with the same gold
@@ -127,11 +158,12 @@ public static class SoulLinkSession
     /// <summary>Called when the run ends (win or loss). Clears all state.</summary>
     public static void OnRunEnd()
     {
-        IsActive         = false;
-        CurrentHp        = 0;
-        MaxHp            = 0;
-        Gold             = 0;
-        _pendingMaxHpHeal = 0;
+        IsActive          = false;
+        CurrentHp         = 0;
+        MaxHp             = 0;
+        Gold              = 0;
+        _pendingMaxHpHeal  = 0;
+        _initPhaseComplete = false;
         _log.Clear();
         TotalDamageTaken   = 0;
         TotalHealingGained = 0;
@@ -152,7 +184,14 @@ public static class SoulLinkSession
         int pendingHeal = _pendingMaxHpHeal;
         _pendingMaxHpHeal = 0;  // always consume — prevents stale values leaking across events
 
+        int unclampedHeal = PendingUnclampedHeal;
+        PendingUnclampedHeal = 0;  // always consume
+
         int delta = rawDelta;
+
+        // The first time a combat HP change fires, we know initialization is complete.
+        // From this point on, campfire/event heals fire once per player and must be scaled.
+        if (inCombat) _initPhaseComplete = true;
 
         if (delta > 0 && !inCombat)
         {
@@ -163,12 +202,18 @@ public static class SoulLinkSession
                 // already correct — don't scale it again.
                 delta = pendingHeal;
             }
-            else if (playerCount > 1)
+            else if (_initPhaseComplete && playerCount > 1)
             {
-                // Normal out-of-combat heal: scale by 1/playerCount so rest/events don't
-                // become N× more powerful in multiplayer.
-                delta = Math.Max(1, delta / playerCount);
+                // Normal out-of-combat heal (campfire, event, etc.): scale by 1/playerCount
+                // so each player's heal contributes a proportional share to the shared pool.
+                // Use the unclamped heal amount from HealInternal if available, so that
+                // near-full players don't get double-penalized (game clamps to MaxHp before
+                // the setter fires, then we'd divide the already-reduced delta).
+                int baseForScaling = unclampedHeal > 0 ? unclampedHeal : rawDelta;
+                delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
             }
+            // If !_initPhaseComplete: this is the Neow/initialization heal. Apply in full —
+            // it fires only once (for one player), so no playerCount division needed.
         }
 
         CurrentHp = Math.Clamp(CurrentHp + delta, 0, MaxHp);
@@ -186,7 +231,7 @@ public static class SoulLinkSession
 
         // Scale out-of-combat max HP gains the same way as regular heals.
         if (delta > 0 && !inCombat && playerCount > 1)
-            scaledDelta = Math.Max(1, delta / playerCount);
+            scaledDelta = Math.Max(1, (int)Math.Round((double)delta / playerCount, MidpointRounding.AwayFromZero));
 
         MaxHp = Math.Max(1, MaxHp + scaledDelta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
@@ -279,10 +324,10 @@ public static class SoulLinkSession
         }
     }
 
-    private static double Average(IReadOnlyList<Player> players, Func<Player, int> selector)
+    private static int RoundedAverage(IReadOnlyList<Player> players, Func<Player, int> selector)
     {
         double sum = 0;
         foreach (var p in players) sum += selector(p);
-        return sum / players.Count;
+        return (int)Math.Round(sum / players.Count, MidpointRounding.AwayFromZero);
     }
 }
