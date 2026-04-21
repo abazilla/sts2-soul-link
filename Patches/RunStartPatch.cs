@@ -27,6 +27,10 @@ internal static class GoldSyncHandler
 
         SoulLinkSession.SetGoldDirect(message.CanonicalGold);
 
+        // Set canonical gold on ALL players on this machine. STS2 does not sync
+        // Player.Gold between machines in real-time; the checksum includes it but
+        // nothing broadcasts it automatically. We are responsible for keeping every
+        // player object on this machine up to date on every sync message.
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
