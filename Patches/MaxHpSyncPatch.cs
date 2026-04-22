@@ -45,7 +45,11 @@ public static class MaxHpSyncPatch
         bool inCombat = CombatManager.Instance.IsInProgress;
         int playerCount = runState.Players.Count;
 
-        SoulLinkSession.ApplyMaxHpDelta(delta, inCombat, playerCount, playerSlot);
+        string? source = SoulLinkSession.PendingSource
+            ?? SoulLinkSession.CurrentRoomSource
+            ?? (inCombat ? "Combat" : "Out of combat");
+        SoulLinkSession.PendingSource = null;
+        SoulLinkSession.ApplyMaxHpDelta(delta, inCombat, playerCount, playerSlot, source);
 
         // Redirect the write on the triggering player.
         value = SoulLinkSession.MaxHp;

@@ -42,6 +42,12 @@ internal static class GoldSyncHandler
             SoulLinkMod.ApplyingCanonical = false;
         }
 
+        // Log the change in the kill-feed on the receiving machine.
+        // Delta=0 means this is an initial sync (run start), not a real change — skip it.
+        SoulLinkSession.LogGoldEntry(message.Delta, message.PlayerSlot,
+            SoulLinkSession.CurrentRoomSource);
+
+        CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
     }

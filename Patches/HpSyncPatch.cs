@@ -49,7 +49,10 @@ public static class HpSyncPatch
         bool inCombat = CombatManager.Instance.IsInProgress;
         int playerCount = runState.Players.Count;
 
-        string? source = inCombat ? "Combat" : "Out of combat";
+        string? source = SoulLinkSession.PendingSource
+            ?? SoulLinkSession.CurrentRoomSource
+            ?? (inCombat ? "Combat" : "Out of combat");
+        SoulLinkSession.PendingSource = null;
         int canonical = SoulLinkSession.ApplyHpDelta(delta, inCombat, playerCount, playerSlot, source);
 
         // Redirect the write on the triggering player.

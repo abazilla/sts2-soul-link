@@ -47,9 +47,19 @@ public static class SoulLinkSession
     // Cleared on every ApplyHpDelta call to prevent stale values across events.
     public static int PendingUnclampedHeal { get; set; }
 
+    // Set by SourceCapturePatch hooks immediately before a HP or gold setter fires.
+    // Consumed (read + cleared) by HpSyncPatch / MaxHpSyncPatch / GoldSyncPatch when
+    // building the LogEntry. Falls back to CurrentRoomSource, then a generic label.
+    public static string? PendingSource { get; set; }
+
+    // Set when entering a room and cleared on exit. Used as a persistent source label
+    // for the whole room (e.g. "Neow", "Rest Site", "Shop") so multi-step events
+    // (lose HP AND gold) all get labelled correctly without needing per-change hooks.
+    public static string? CurrentRoomSource { get; set; }
+
     // ── Change log ────────────────────────────────────────────────────────────
 
-    private const int LogCapacity = 10;
+    private const int LogCapacity = 20;
     private static readonly LinkedList<LogEntry> _log = new();
     public static IEnumerable<LogEntry> Log => _log;
 
@@ -158,12 +168,14 @@ public static class SoulLinkSession
     /// <summary>Called when the run ends (win or loss). Clears all state.</summary>
     public static void OnRunEnd()
     {
-        IsActive          = false;
-        CurrentHp         = 0;
-        MaxHp             = 0;
-        Gold              = 0;
+        IsActive           = false;
+        CurrentHp          = 0;
+        MaxHp              = 0;
+        Gold               = 0;
         _pendingMaxHpHeal  = 0;
         _initPhaseComplete = false;
+        PendingSource      = null;
+        CurrentRoomSource  = null;
         _log.Clear();
         TotalDamageTaken   = 0;
         TotalHealingGained = 0;
@@ -259,11 +271,22 @@ public static class SoulLinkSession
     }
 
     /// <summary>
+    /// Adds a gold log entry (and updates cumulative totals) without changing canonical gold.
+    /// Called by GoldSyncHandler on the receiving peer to log the remote player's change.
+    /// Delta=0 is a no-op (used for the initial sync-at-run-start message).
+    /// </summary>
+    public static void LogGoldEntry(int delta, int playerSlot, string? source)
+    {
+        if (delta == 0) return;
+        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta, Source: source));
+    }
+
+    /// <summary>
     /// Called from GoldSyncPatch. Updates the canonical gold pool.
     /// If blocked (e.g. Ectoplasm), the delta is logged but NOT applied.
     /// Returns the canonical gold value that should actually be written.
     /// </summary>
-    public static int ApplyGoldDelta(int delta, int playerSlot, bool blocked, string? blockSource = null)
+    public static int ApplyGoldDelta(int delta, int playerSlot, bool blocked, string? blockSource = null, string? source = null)
     {
         if (blocked)
         {
@@ -272,7 +295,7 @@ public static class SoulLinkSession
         }
 
         Gold = Math.Max(0, Gold + delta);
-        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta));
+        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta, Source: source));
         return Gold;
     }
 

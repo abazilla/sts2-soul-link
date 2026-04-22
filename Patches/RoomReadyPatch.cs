@@ -7,10 +7,9 @@ using SoulLinkMod.UI;
 namespace SoulLinkMod.Patches;
 
 /// <summary>
-/// Hooks NCombatRoom._Ready to inject CombatLogPanel and DebugOverlay.
-/// Hooks _ExitTree on NCombatRoom to clear panel references.
-/// Hooks each confirmed non-combat room's _Ready to inject RunStatsPanel and DebugOverlay.
-/// Hooks _ExitTree on non-combat rooms to clear DebugOverlay reference.
+/// Hooks NCombatRoom._Ready and each non-combat room's _Ready to inject Soul Link UI panels.
+/// Each panel is wrapped in a CanvasLayer (Layer=100) so it renders above the game's own UI.
+/// Hooks _ExitTree on each room type to clear static panel references.
 ///
 /// Confirmed room class names (MegaCrit.Sts2.Core.Nodes.Rooms):
 ///   NCombatRoom, NMapRoom, NEventRoom, NRestSiteRoom, NTreasureRoom, NMerchantRoom
@@ -29,18 +28,7 @@ public static class CombatRoomReadyPatch
     static void Postfix(Node __instance)
     {
         if (!SoulLinkSession.IsActive) return;
-
-        var combatLog = new CombatLogPanel();
-        __instance.AddChild(combatLog);
-        combatLog.Initialize();
-
-        var stats = new RunStatsPanel();
-        __instance.AddChild(stats);
-        stats.Initialize();
-
-        var debug = new DebugOverlay();
-        __instance.AddChild(debug);
-        debug.Initialize();
+        RoomPanelInjector.AddPanels(__instance);
     }
 }
 
@@ -85,14 +73,7 @@ public static class NonCombatRoomReadyPatch
     static void Postfix(Node __instance)
     {
         if (!SoulLinkSession.IsActive) return;
-
-        var stats = new RunStatsPanel();
-        __instance.AddChild(stats);
-        stats.Initialize();
-
-        var debug = new DebugOverlay();
-        __instance.AddChild(debug);
-        debug.Initialize();
+        RoomPanelInjector.AddPanels(__instance);
     }
 }
 
@@ -114,7 +95,39 @@ public static class NonCombatRoomExitPatch
     [HarmonyPostfix]
     static void Postfix()
     {
+        CombatLogPanel.Clear();
         RunStatsPanel.Clear();
         DebugOverlay.Clear();
+    }
+}
+
+/// <summary>
+/// Shared helper: creates the three Soul Link UI panels and adds each to its own
+/// CanvasLayer (Layer=100) so they render above the game's built-in UI layers.
+/// </summary>
+internal static class RoomPanelInjector
+{
+    internal static void AddPanels(Node room)
+    {
+        // CombatLogPanel — kill-feed style HP/gold log, top-right corner.
+        var combatLogLayer = new CanvasLayer { Layer = 100 };
+        room.AddChild(combatLogLayer);
+        var combatLog = new CombatLogPanel();
+        combatLogLayer.AddChild(combatLog);
+        combatLog.Initialize();
+
+        // RunStatsPanel — cumulative run totals, left side.
+        var statsLayer = new CanvasLayer { Layer = 100 };
+        room.AddChild(statsLayer);
+        var stats = new RunStatsPanel();
+        statsLayer.AddChild(stats);
+        stats.Initialize();
+
+        // DebugOverlay — live sync diagnostics, left side.
+        var debugLayer = new CanvasLayer { Layer = 100 };
+        room.AddChild(debugLayer);
+        var debug = new DebugOverlay();
+        debugLayer.AddChild(debug);
+        debug.Initialize();
     }
 }

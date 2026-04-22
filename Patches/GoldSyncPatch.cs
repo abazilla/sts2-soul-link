@@ -76,8 +76,12 @@ public static class GoldSyncPatch
         bool blocked = delta > 0 && __instance.Relics.Any(r =>
             r.Id?.Entry == "Ectoplasm");
 
+        string? source = SoulLinkSession.PendingSource
+            ?? SoulLinkSession.CurrentRoomSource;
+        SoulLinkSession.PendingSource = null;
         int canonical = SoulLinkSession.ApplyGoldDelta(delta, playerSlot, blocked,
-            blockSource: blocked ? "Ectoplasm" : null);
+            blockSource: blocked ? "Ectoplasm" : null,
+            source: blocked ? null : source);
 
         // Redirect the local player's gold to the canonical total.
         value = canonical;
@@ -98,10 +102,16 @@ public static class GoldSyncPatch
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Broadcast the canonical gold to the other machine.
-        RunManager.Instance?.NetService?.SendMessage(
-            new SoulLinkGoldSyncMessage { CanonicalGold = canonical });
+        // Broadcast the canonical gold to the other machine, including delta and slot
+        // so the receiver can log the change in their kill-feed.
+        RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
+        {
+            CanonicalGold = canonical,
+            Delta         = delta,
+            PlayerSlot    = playerSlot,
+        });
 
+        CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
     }

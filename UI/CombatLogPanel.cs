@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Godot;
 using MegaCrit.Sts2.Core.Runs;
 using Steamworks;
@@ -8,37 +9,43 @@ using Steamworks;
 namespace SoulLinkMod.UI;
 
 /// <summary>
-/// In-combat HUD overlay showing the last 5 HP/gold change log entries,
-/// right-aligned in the top-right corner of the screen.
+/// Kill-feed style HUD overlay showing the last 7 HP/gold change log entries.
+/// Positioned in the top-right corner (below the menu bar).
 ///
-/// Added as a child of NCombatRoom by CombatRoomReadyPatch.
+/// Uses a RichTextLabel with BBCode — same rendering pattern as RunStatsPanel
+/// (real Godot node with explicit size, no custom _Draw override).
+///
+/// Added as a child of a CanvasLayer (Layer=100) inside each room by RoomReadyPatch.
 /// </summary>
 public class CombatLogPanel : Control
 {
     public static CombatLogPanel? Current;
 
-    private const int MaxVisible  = 5;
+    private const int MaxVisible  = 7;
     private const int LineHeight  = 22;
-    private const int RightMargin = 10;
-    private const int StartYFromBottom = 160;
+    private const float PanelW    = 500f;
+    private const float PanelH    = (MaxVisible + 1) * LineHeight + 10f;
+    private const float RightMargin = 10f;
+    private const float TopMargin   = 150f;
 
-    // Player slot → color
-    private static readonly Color[] PlayerColors =
+    // Player slot → color hex (no alpha prefix)
+    private static readonly string[] PlayerColorHex =
     {
-        new(0f,   1f,   1f,   1f),   // slot 0 — cyan
-        new(1f,   0.85f,0f,   1f),   // slot 1 — gold/yellow
-        new(1f,   0.3f, 1f,   1f),   // slot 2 — magenta/pink
-        new(0.5f, 1f,   0.5f, 1f),   // slot 3 — light green
+        "00ffff",   // slot 0 — cyan
+        "ffd900",   // slot 1 — gold/yellow
+        "ff4dff",   // slot 2 — magenta/pink
+        "80ff80",   // slot 3 — light green
     };
 
-    private static readonly Color ColorDamage  = new(1f,   0.2f, 0.2f, 1f);   // red
-    private static readonly Color ColorHeal    = new(0.2f, 1f,   0.3f, 1f);   // green
-    private static readonly Color ColorMaxHp   = new(1f,   0.65f,0f,   1f);   // orange
-    private static readonly Color ColorGoldGain = new(1f,  0.9f, 0f,   1f);   // yellow
-    private static readonly Color ColorGoldSpend = new(1f, 0.65f,0f,   1f);   // orange
-    private static readonly Color ColorBlocked = new(0.5f, 0.5f, 0.5f, 1f);   // gray
+    private const string HexDamage    = "ff3333";
+    private const string HexHeal      = "33ff4d";
+    private const string HexGoldGain  = "ffe519";
+    private const string HexGoldSpend = "ffa600";
+    private const string HexBlocked   = "808080";
+    private const string HexSource    = "ffffff";
+    private const string HexHeader    = "999999";
 
-    private Font? _font;
+    private RichTextLabel? _label;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -48,16 +55,31 @@ public class CombatLogPanel : Control
         {
             Current = this;
 
-            // Fill the screen so DrawString coordinates are relative to top-left.
-            AnchorLeft   = 0f; AnchorRight  = 1f;
-            AnchorTop    = 0f; AnchorBottom = 1f;
-            OffsetLeft   = 0;  OffsetRight  = 0;
-            OffsetTop    = 0;  OffsetBottom = 0;
+            // Pin to top-right corner, same explicit-offset pattern as RunStatsPanel.
+            AnchorLeft   = 1f; AnchorRight  = 1f;
+            AnchorTop    = 0f; AnchorBottom = 0f;
+            OffsetLeft   = -(RightMargin + PanelW);
+            OffsetTop    = TopMargin;
+            OffsetRight  = -RightMargin;
+            OffsetBottom = TopMargin + PanelH;
 
             MouseFilter = MouseFilterEnum.Ignore;
 
-            // Use the default theme font; falls back to the built-in font.
-            _font = ThemeDB.FallbackFont;
+            _label = new RichTextLabel
+            {
+                BbcodeEnabled  = true,
+                AutowrapMode   = TextServer.AutowrapMode.Off,
+                ScrollActive   = false,
+                FitContent     = false,
+                MouseFilter    = MouseFilterEnum.Ignore,
+            };
+            // Fill the panel
+            _label.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            _label.AddThemeFontSizeOverride("normal_font_size", 14);
+            AddChild(_label);
+
+            GD.Print($"[SoulLink] CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
+            Refresh();
         }
         catch (Exception ex)
         {
@@ -65,129 +87,138 @@ public class CombatLogPanel : Control
         }
     }
 
-    public void Refresh() => QueueRedraw();
+    public void Refresh()
+    {
+        if (_label == null) return;
+        try   { DoRefresh(); }
+        catch (Exception ex) { GD.PrintErr($"[SoulLink] CombatLogPanel.Refresh crashed: {ex}"); }
+    }
 
     public static void Clear() => Current = null;
 
-    // ── Draw ──────────────────────────────────────────────────────────────────
+    // ── Rendering ─────────────────────────────────────────────────────────────
 
-    public override void _Draw()
+    private void DoRefresh()
     {
-        if (!SoulLinkSession.IsActive) return;
+        if (_label == null) return;
+
+        var sb = new StringBuilder();
+
+        // Header line — always visible so we can confirm the panel is rendering.
+        sb.Append($"[right][color=#{HexHeader}]── Soul Link Log ──[/color][/right]\n");
+
+        if (!SoulLinkSession.IsActive)
+        {
+            _label.Text = sb.ToString();
+            return;
+        }
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
-        if (runState == null) return;
+        if (runState == null)
+        {
+            _label.Text = sb.ToString();
+            return;
+        }
 
         var entries = SoulLinkSession.Log.Take(MaxVisible).ToList();
-        if (entries.Count == 0) return;
-
-        float screenW = Size.X;
-        float screenH = Size.Y;
-        float rightEdge = screenW - RightMargin;
-        float startY    = screenH - StartYFromBottom;
-
-        Font font = _font ?? ThemeDB.FallbackFont;
-        int fontSize = 14;
-
-        for (int i = 0; i < entries.Count; i++)
+        if (entries.Count == 0)
         {
-            var entry = entries[i];
-            float y = startY - i * LineHeight;
-
-            (string playerText, string actionText, Color playerColor, Color actionColor)
-                = FormatEntry(entry, runState);
-
-            // Measure combined width so both pieces flush against the right edge.
-            float playerW = font.GetStringSize(playerText, fontSize: fontSize).X;
-            float actionW = font.GetStringSize(actionText, fontSize: fontSize).X;
-            float totalW  = playerW + actionW;
-
-            float xPlayer = rightEdge - totalW;
-            float xAction = xPlayer + playerW;
-
-            DrawString(font, new Vector2(xPlayer, y), playerText, fontSize: fontSize, modulate: playerColor);
-            DrawString(font, new Vector2(xAction,  y), actionText, fontSize: fontSize, modulate: actionColor);
+            sb.Append($"[right][color=#{HexBlocked}](no events yet)[/color][/right]\n");
+            _label.Text = sb.ToString();
+            return;
         }
+
+        foreach (var entry in entries)
+        {
+            sb.Append("[right]");
+            foreach (var (text, hex) in FormatEntry(entry, runState))
+                sb.Append($"[color=#{hex}]{SecurityElement_Escape(text)}[/color]");
+            sb.Append("[/right]\n");
+        }
+
+        _label.Text = sb.ToString();
     }
 
     // ── Formatting ────────────────────────────────────────────────────────────
 
-    private static (string playerText, string actionText, Color playerColor, Color actionColor)
-        FormatEntry(LogEntry entry, RunState runState)
+    private static List<(string text, string hex)> FormatEntry(LogEntry entry, RunState runState)
     {
-        Color playerColor = PlayerColors[Math.Min(entry.PlayerSlot, PlayerColors.Length - 1)];
+        string playerHex  = PlayerColorHex[Math.Min(entry.PlayerSlot, PlayerColorHex.Length - 1)];
         string playerName = GetPlayerName(entry.PlayerSlot, runState);
-        string playerText = $"[{playerName}] ";
 
-        if (entry.Type == LogEntryType.Health)
+        return entry.Type == LogEntryType.Health
+            ? FormatHealth(playerName, playerHex, entry)
+            : FormatGold(playerName, playerHex, entry);
+    }
+
+    private static List<(string, string)> FormatHealth(string name, string nameHex, LogEntry e)
+    {
+        var segs = new List<(string, string)> { ($"{name} ", nameHex) };
+
+        int d = e.Delta, md = e.MaxHpDelta;
+
+        if (d < 0 && md < 0)
         {
-            string actionText;
-            Color actionColor;
-
-            if (entry.Delta != 0 && entry.MaxHpDelta != 0)
-            {
-                // Both current and max HP changed.
-                if (entry.Delta > 0 && entry.MaxHpDelta > 0)
-                {
-                    actionText  = $"healed {entry.Delta} HP and gained {entry.MaxHpDelta} max HP";
-                    actionColor = ColorHeal;
-                }
-                else
-                {
-                    actionText  = $"lost {-entry.Delta} HP and {-entry.MaxHpDelta} max HP";
-                    actionColor = ColorDamage;
-                }
-            }
-            else if (entry.Delta < 0)
-            {
-                string src = entry.Source != null ? $" from {entry.Source}" : "";
-                actionText  = $"took {-entry.Delta} damage{src}";
-                actionColor = ColorDamage;
-            }
-            else if (entry.Delta > 0)
-            {
-                string src = entry.Source != null ? $" via {entry.Source}" : "";
-                actionText  = $"healed {entry.Delta} health{src}";
-                actionColor = ColorHeal;
-            }
-            else if (entry.MaxHpDelta > 0)
-            {
-                string src = entry.Source != null ? $" via {entry.Source}" : "";
-                actionText  = $"gained {entry.MaxHpDelta} max HP{src}";
-                actionColor = ColorMaxHp;
-            }
-            else
-            {
-                string src = entry.Source != null ? $" from {entry.Source}" : "";
-                actionText  = $"lost {-entry.MaxHpDelta} max HP{src}";
-                actionColor = ColorMaxHp;
-            }
-
-            return (playerText, actionText, playerColor, actionColor);
+            segs.Add(($"lost {-d} HP and {-md} max HP", HexDamage));
+            AppendSource(segs, "from", e.Source);
         }
-        else // Gold
+        else if (d < 0)
         {
-            string actionText;
-            Color actionColor;
+            segs.Add(($"took {-d} damage", HexDamage));
+            AppendSource(segs, "from", e.Source);
+        }
+        else if (d > 0 && md > 0)
+        {
+            segs.Add(($"healed {d} HP and gained {md} max HP", HexHeal));
+            AppendSource(segs, "via", e.Source);
+        }
+        else if (d > 0)
+        {
+            segs.Add(($"healed {d} health", HexHeal));
+            AppendSource(segs, "via", e.Source);
+        }
+        else if (md > 0)
+        {
+            segs.Add(($"gained {md} max HP", HexHeal));
+            AppendSource(segs, "via", e.Source);
+        }
+        else if (md < 0)
+        {
+            segs.Add(($"lost {-md} max HP", HexDamage));
+            AppendSource(segs, "from", e.Source);
+        }
 
-            if (entry.Blocked)
-            {
-                string relic = entry.Source ?? "Relic";
-                actionText  = $"couldn't gain {entry.Delta} gold ({relic})";
-                actionColor = ColorBlocked;
-            }
-            else if (entry.Delta > 0)
-            {
-                actionText  = $"gained {entry.Delta} gold";
-                actionColor = ColorGoldGain;
-            }
-            else
-            {
-                actionText  = $"spent {-entry.Delta} gold";
-                actionColor = ColorGoldSpend;
-            }
+        return segs;
+    }
 
-            return (playerText, actionText, playerColor, actionColor);
+    private static List<(string, string)> FormatGold(string name, string nameHex, LogEntry e)
+    {
+        var segs = new List<(string, string)> { ($"{name} ", nameHex) };
+
+        if (e.Blocked)
+        {
+            segs.Add(($"couldn't gain {e.Delta} gold ({e.Source ?? "Relic"})", HexBlocked));
+        }
+        else if (e.Delta > 0)
+        {
+            segs.Add(($"gained {e.Delta} gold", HexGoldGain));
+            AppendSource(segs, "from", e.Source);
+        }
+        else
+        {
+            segs.Add(($"spent {-e.Delta} gold", HexGoldSpend));
+            AppendSource(segs, "on", e.Source);
+        }
+
+        return segs;
+    }
+
+    private static void AppendSource(List<(string, string)> segs, string prep, string? source)
+    {
+        if (!string.IsNullOrEmpty(source))
+        {
+            segs.Add(($" {prep} ", HexSource));
+            segs.Add((source, HexSource));
         }
     }
 
@@ -212,4 +243,8 @@ public class CombatLogPanel : Control
             return player.Character.GetType().Name;
         }
     }
+
+    /// <summary>Escapes characters that BBCode would misinterpret (square brackets).</summary>
+    private static string SecurityElement_Escape(string text) =>
+        text.Replace("[", "[[");
 }
