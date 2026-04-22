@@ -57,6 +57,12 @@ public static class GoldSyncPatch
         }
         if (playerSlot < 0) return;
 
+        // ── Gold not shared ─────────────────────────────────────────────────────
+        // When gold sharing is disabled each player owns their own gold.
+        // Skip the entire patch — no canonical redirect, no broadcast — and let
+        // STS2's own SerializablePlayer state sync keep both machines consistent.
+        if (!SoulLinkSession.ActiveRunSettings.ShareGold) return;
+
         // ── Remote player ───────────────────────────────────────────────────────
         // STS2's periodic sync is writing this player's gold from their home machine.
         // The packet may be stale (sent before our GoldSyncMessage arrived there),
@@ -71,6 +77,8 @@ public static class GoldSyncPatch
         int delta = value - __instance.Gold;
         if (delta == 0) return;
 
+        int playerCount = runState.Players.Count;
+
         // Check for Ectoplasm or STS2 equivalent gold-blocking relic.
         // TODO: verify the STS2 relic ID for the Ectoplasm equivalent.
         bool blocked = delta > 0 && __instance.Relics.Any(r =>
@@ -79,7 +87,7 @@ public static class GoldSyncPatch
         string? source = SoulLinkSession.PendingSource
             ?? SoulLinkSession.CurrentRoomSource;
         SoulLinkSession.PendingSource = null;
-        int canonical = SoulLinkSession.ApplyGoldDelta(delta, playerSlot, blocked,
+        int canonical = SoulLinkSession.ApplyGoldDelta(delta, playerCount, playerSlot, blocked,
             blockSource: blocked ? "Ectoplasm" : null,
             source: blocked ? null : source);
 

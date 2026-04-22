@@ -23,8 +23,8 @@ public class DebugOverlay : Control
     public static DebugOverlay? Current;
 
     private const int MaxPlayers = 4;
-    private const float PanelW   = 220f;
-    private const float PanelH   = 140f;
+    private const float PanelW   = 240f;
+    private const float PanelH   = 185f;
     private const float AnchorV  = 0.5f;
     private const float OffLeft  = 10f;
     private const float OffTop   = 90f;
@@ -34,6 +34,8 @@ public class DebugOverlay : Control
     private PanelContainer? _bgPanel;
     private Label? _sessionHpLbl;
     private Label? _sessionGoldLbl;
+    private Label? _settingsLbl1;
+    private Label? _settingsLbl2;
     private readonly Label[] _playerLbls = new Label[MaxPlayers];
 
     private static readonly Color ColorHp       = new(0.6f, 1f,   0.6f, 1f);
@@ -105,6 +107,13 @@ public class DebugOverlay : Control
 
         content.AddChild(new HSeparator());
 
+        _settingsLbl1 = MakeLabel();
+        _settingsLbl2 = MakeLabel();
+        content.AddChild(_settingsLbl1);
+        content.AddChild(_settingsLbl2);
+
+        content.AddChild(new HSeparator());
+
         var playerHeader = MakeLabel();
         playerHeader.Text = "Game HP (actual):";
         content.AddChild(playerHeader);
@@ -148,6 +157,10 @@ public class DebugOverlay : Control
 
         Set(_sessionHpLbl,   $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
         Set(_sessionGoldLbl, $"Session Gold:  {SoulLinkSession.Gold}",                              ColorGold);
+
+        var rs = SoulLinkSession.ActiveRunSettings;
+        Set(_settingsLbl1, $"SplitHP:{rs.SplitMaxHp}  SplitHeal:{rs.SplitHeal}", ColorPlayer);
+        Set(_settingsLbl2, $"ShareGold:{rs.ShareGold}  SplitGold:{rs.SplitGold}", ColorPlayer);
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
         for (int i = 0; i < MaxPlayers; i++)

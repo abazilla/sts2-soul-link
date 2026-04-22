@@ -21,12 +21,15 @@ public class CombatLogPanel : Control
 {
     public static CombatLogPanel? Current;
 
-    private const int MaxVisible  = 7;
-    private const int LineHeight  = 22;
-    private const float PanelW    = 500f;
-    private const float PanelH    = (MaxVisible + 1) * LineHeight + 10f;
+    private const int MaxVisible    = 7;
+    private const int LineHeight    = 22;
+    private const float PanelW      = 500f;
+    private const float PanelH      = (MaxVisible + 1) * LineHeight + 10f;
     private const float RightMargin = 10f;
     private const float TopMargin   = 150f;
+
+    private bool _expanded = true;
+    private Button? _toggleButton;
 
     // Player slot → color hex (no alpha prefix)
     private static readonly string[] PlayerColorHex =
@@ -63,8 +66,20 @@ public class CombatLogPanel : Control
             OffsetRight  = -RightMargin;
             OffsetBottom = TopMargin + PanelH;
 
-            MouseFilter = MouseFilterEnum.Ignore;
+            MouseFilter = MouseFilterEnum.Pass;
 
+            var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+            vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            AddChild(vbox);
+
+            // Header toggle button — mirrors RunStatsPanel's borderless button style.
+            _toggleButton = new Button { Text = "Soul Link Feed v" };
+            _toggleButton.Pressed += OnToggle;
+            ApplyHeaderButtonStyle(_toggleButton);
+            SoulLinkFont.Apply(_toggleButton);
+            vbox.AddChild(_toggleButton);
+
+            // Content label — hidden when collapsed.
             _label = new RichTextLabel
             {
                 BbcodeEnabled  = true,
@@ -73,11 +88,10 @@ public class CombatLogPanel : Control
                 FitContent     = false,
                 MouseFilter    = MouseFilterEnum.Ignore,
             };
-            // Fill the panel
-            _label.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+            _label.CustomMinimumSize = new Vector2(PanelW, MaxVisible * LineHeight);
             _label.AddThemeFontSizeOverride("normal_font_size", 15);
             SoulLinkFont.Apply(_label);
-            AddChild(_label);
+            vbox.AddChild(_label);
 
             GD.Print($"[SoulLink] CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
             Refresh();
@@ -101,20 +115,20 @@ public class CombatLogPanel : Control
 
     private void DoRefresh()
     {
-        if (_label == null) return;
+        if (_label == null || _toggleButton == null) return;
 
-        var sb = new StringBuilder();
+        bool visible = SoulLinkSession.IsActive;
+        Visible = visible;
+        if (!visible) return;
 
-        // Header line — always visible so we can confirm the panel is rendering.
-        sb.Append($"[right][color=#{HexHeader}]── Soul Link Log ──[/color][/right]\n");
+        _toggleButton.Text = _expanded ? "Soul Link Feed v" : "Soul Link Feed >";
+        _label.Visible = _expanded;
 
-        if (!SoulLinkSession.IsActive)
-        {
-            _label.Text = sb.ToString();
-            return;
-        }
+        if (!_expanded) return;
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
+        var sb = new StringBuilder();
+
         if (runState == null)
         {
             _label.Text = sb.ToString();
@@ -138,6 +152,23 @@ public class CombatLogPanel : Control
         }
 
         _label.Text = sb.ToString();
+    }
+
+    private void OnToggle()
+    {
+        _expanded = !_expanded;
+        Refresh();
+    }
+
+    private static void ApplyHeaderButtonStyle(Button btn)
+    {
+        btn.Alignment = HorizontalAlignment.Right;
+        var empty = new StyleBoxEmpty();
+        btn.AddThemeStyleboxOverride("normal",   empty);
+        btn.AddThemeStyleboxOverride("hover",    empty);
+        btn.AddThemeStyleboxOverride("pressed",  empty);
+        btn.AddThemeStyleboxOverride("focus",    empty);
+        btn.AddThemeStyleboxOverride("disabled", empty);
     }
 
     // ── Formatting ────────────────────────────────────────────────────────────

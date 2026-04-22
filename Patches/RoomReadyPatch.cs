@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Patches;
@@ -109,25 +111,56 @@ internal static class RoomPanelInjector
 {
     internal static void AddPanels(Node room)
     {
+        // Re-send settings from the host on every room entry.
+        // The run-start send in RunLaunchPatch races the client's handler registration;
+        // by the time any room is ready, both machines are fully loaded and the handler
+        // is guaranteed to be registered, so this delivery is reliable.
+        var runState = RunManager.Instance?.DebugOnlyGetState();
+        if (runState != null && LocalContext.IsMe(runState.Players[0]))
+        {
+            var rs = SoulLinkSession.ActiveRunSettings;
+            RunManager.Instance!.NetService.SendMessage(new SoulLinkSettingsSyncMessage
+            {
+                SplitMaxHp = rs.SplitMaxHp,
+                SplitHeal  = rs.SplitHeal,
+                ShareGold  = rs.ShareGold,
+                SplitGold  = rs.SplitGold,
+            });
+            GD.Print("[SoulLink] Re-sent settings sync from host at room entry.");
+        }
+
+        // Panel visibility is a LOCAL setting — each player shows/hides their own panels
+        // independently regardless of what the host chose.
+        var ls = SoulLinkSettings.Instance;
+
         // CombatLogPanel — kill-feed style HP/gold log, top-right corner.
-        var combatLogLayer = new CanvasLayer { Layer = 100 };
-        room.AddChild(combatLogLayer);
-        var combatLog = new CombatLogPanel();
-        combatLogLayer.AddChild(combatLog);
-        combatLog.Initialize();
+        if (ls.ShowCombatLog)
+        {
+            var combatLogLayer = new CanvasLayer { Layer = 100 };
+            room.AddChild(combatLogLayer);
+            var combatLog = new CombatLogPanel();
+            combatLogLayer.AddChild(combatLog);
+            combatLog.Initialize();
+        }
 
         // RunStatsPanel — cumulative run totals, left side.
-        var statsLayer = new CanvasLayer { Layer = 100 };
-        room.AddChild(statsLayer);
-        var stats = new RunStatsPanel();
-        statsLayer.AddChild(stats);
-        stats.Initialize();
+        if (ls.ShowRunStats)
+        {
+            var statsLayer = new CanvasLayer { Layer = 100 };
+            room.AddChild(statsLayer);
+            var stats = new RunStatsPanel();
+            statsLayer.AddChild(stats);
+            stats.Initialize();
+        }
 
         // DebugOverlay — live sync diagnostics, left side.
-        var debugLayer = new CanvasLayer { Layer = 100 };
-        room.AddChild(debugLayer);
-        var debug = new DebugOverlay();
-        debugLayer.AddChild(debug);
-        debug.Initialize();
+        if (ls.ShowDebugOverlay)
+        {
+            var debugLayer = new CanvasLayer { Layer = 100 };
+            room.AddChild(debugLayer);
+            var debug = new DebugOverlay();
+            debugLayer.AddChild(debug);
+            debug.Initialize();
+        }
     }
 }

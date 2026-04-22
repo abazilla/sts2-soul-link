@@ -1,5 +1,6 @@
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
@@ -13,6 +14,41 @@ namespace SoulLinkMod.Patches;
 /// RunState.Players is fully populated before Launch() fires — safe to read there.
 /// Soul Link only activates for multiplayer runs (Players.Count > 1).
 /// </summary>
+internal static class SettingsSyncHandler
+{
+    /// <summary>
+    /// Receives the host's run settings at run start and locks them into the session.
+    /// Fires on both peers (host receives its own broadcast too, which is harmless).
+    /// </summary>
+    internal static void Handle(SoulLinkSettingsSyncMessage message, ulong senderId)
+    {
+        var settings = new SoulLinkRunSettings
+        {
+            SplitMaxHp = message.SplitMaxHp,
+            SplitHeal  = message.SplitHeal,
+            ShareGold  = message.ShareGold,
+            SplitGold  = message.SplitGold,
+        };
+
+        if (SoulLinkSession.IsActive)
+        {
+            // Normal path: run is already active on this peer, apply immediately.
+            SoulLinkSession.ActiveRunSettings = settings;
+        }
+        else
+        {
+            // Early path: host's message arrived before our RunManager.Launch() postfix ran.
+            // Store it so OnRunStart() can pick it up instead of using local settings.
+            SoulLinkSession.PendingSyncedRunSettings = settings;
+        }
+
+        GD.Print($"[SoulLink] Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, ShareGold={message.ShareGold}, SplitGold={message.SplitGold}");
+
+        // Refresh the settings panel on the client (read-only view).
+        UI.SoulLinkSettingsPanel.Current?.Refresh();
+    }
+}
+
 internal static class GoldSyncHandler
 {
     /// <summary>
@@ -63,24 +99,50 @@ public static class RunLaunchPatch
         if (runState == null) return;
 
         GD.Print($"[SoulLink] Run launched with {runState.Players.Count} player(s).");
+
+        // Register handlers BEFORE OnRunStart so that if the host's SoulLinkSettingsSyncMessage
+        // arrives before our own Launch() postfix completes, it lands in PendingSyncedRunSettings
+        // and OnRunStart() picks it up.
+        if (runState.Players.Count > 1)
+        {
+            RunManager.Instance!.NetService.RegisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            RunManager.Instance.NetService.RegisterMessageHandler<SoulLinkSettingsSyncMessage>(SettingsSyncHandler.Handle);
+        }
+
         SoulLinkSession.OnRunStart();
 
         if (!SoulLinkSession.IsActive)
         {
+            // Solo run — unregister what we just registered.
+            RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkSettingsSyncMessage>(SettingsSyncHandler.Handle);
             GD.Print("[SoulLink] Solo run — session inactive.");
             return;
         }
 
         GD.Print($"[SoulLink] Soul Link active. Shared HP: {SoulLinkSession.CurrentHp}/{SoulLinkSession.MaxHp}, Gold: {SoulLinkSession.Gold}");
 
-        // Register to receive canonical gold broadcasts from the other peer.
-        // SoulLinkGoldSyncMessage is auto-registered by STS2 because it implements INetMessage
-        // and STS2 scans mod assemblies via ReflectionHelper.GetSubtypesInMods<INetMessage>().
-        RunManager.Instance!.NetService.RegisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+        // Only the host broadcasts settings. The host is the machine whose local player is slot 0.
+        // Both machines run this code, but only one should send the authoritative settings.
+        bool isHost = LocalContext.IsMe(runState.Players[0]);
+        GD.Print($"[SoulLink] IsHost={isHost} — SplitMaxHp={SoulLinkSession.ActiveRunSettings.SplitMaxHp}, ShareGold={SoulLinkSession.ActiveRunSettings.ShareGold}");
+
+        if (isHost)
+        {
+            var rs = SoulLinkSession.ActiveRunSettings;
+            RunManager.Instance!.NetService.SendMessage(new SoulLinkSettingsSyncMessage
+            {
+                SplitMaxHp = rs.SplitMaxHp,
+                SplitHeal  = rs.SplitHeal,
+                ShareGold  = rs.ShareGold,
+                SplitGold  = rs.SplitGold,
+            });
+        }
 
         // Broadcast initial canonical gold to fix any divergence from Neow bonuses or
         // save-load gold changes that fired before IsActive was set.
-        RunManager.Instance.NetService.SendMessage(
+        // Each machine sends its own canonical so both sides are synced.
+        RunManager.Instance!.NetService.SendMessage(
             new SoulLinkGoldSyncMessage { CanonicalGold = SoulLinkSession.Gold });
     }
 }
@@ -95,6 +157,7 @@ public static class RunCleanUpPatch
         GD.Print("[SoulLink] Run ended. Clearing session.");
 
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkSettingsSyncMessage>(SettingsSyncHandler.Handle);
 
         SoulLinkSession.OnRunEnd();
     }

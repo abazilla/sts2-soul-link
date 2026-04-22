@@ -27,6 +27,23 @@ public static class SoulLinkSession
     public static int MaxHp      { get; private set; }
     public static int Gold       { get; private set; }
 
+    // ── Active run settings ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// The settings locked in for the current run.
+    /// Set at run start from the host's SoulLinkSettings (fresh run) or from
+    /// the saved run-settings file (save-load). Broadcast to clients via
+    /// SoulLinkSettingsSyncMessage so all peers use identical values.
+    /// </summary>
+    public static SoulLinkRunSettings ActiveRunSettings { get; internal set; }
+
+    /// <summary>
+    /// Holds run settings received from the host via SoulLinkSettingsSyncMessage
+    /// before this peer's own RunManager.Launch() has fired (client timing).
+    /// OnRunStart() checks this and prefers it over local settings when set.
+    /// </summary>
+    internal static SoulLinkRunSettings? PendingSyncedRunSettings;
+
     // ── HP heal coordination ──────────────────────────────────────────────────
 
     // When MaxHP increases, the game fires a follow-up CurrentHp write whose delta
@@ -146,6 +163,34 @@ public static class SoulLinkSession
 
         int sharedGold = runState.Players[0].Gold;  // all players start with the same gold
 
+        // Determine which run settings to use.
+        // Priority:
+        //   1. PendingSyncedRunSettings — host already sent us settings before our Launch fired (client timing).
+        //   2. Save-load file — restores the original host's settings from when the run started.
+        //   3. Fresh run — use this peer's current settings preferences (only the host should reach here
+        //      in normal operation; the client will receive the sync message shortly after).
+        if (PendingSyncedRunSettings.HasValue)
+        {
+            ActiveRunSettings = PendingSyncedRunSettings.Value;
+            PendingSyncedRunSettings = null;
+            GD.Print("[SoulLink] Applied pre-received run settings from host (early sync message).");
+        }
+        else if (isSaveLoad)
+        {
+            SoulLinkRunSettings? saved = SoulLinkSettings.LoadRunSettings();
+            ActiveRunSettings = saved ?? SoulLinkSettings.Instance.ToRunSettings();
+            if (saved == null)
+                GD.PrintErr("[SoulLink] No run settings file found on save-load; using current settings.");
+        }
+        else
+        {
+            ActiveRunSettings = SoulLinkSettings.Instance.ToRunSettings();
+        }
+
+        // Always re-save so re-hosting from this save will see the correct settings.
+        SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
+        GD.Print($"[SoulLink] Run settings: SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, ShareGold={ActiveRunSettings.ShareGold}, SplitGold={ActiveRunSettings.SplitGold}");
+
         MaxHp     = sharedMaxHp;
         CurrentHp = sharedCurrentHp;
         Gold      = sharedGold;
@@ -168,19 +213,24 @@ public static class SoulLinkSession
     /// <summary>Called when the run ends (win or loss). Clears all state.</summary>
     public static void OnRunEnd()
     {
-        IsActive           = false;
-        CurrentHp          = 0;
-        MaxHp              = 0;
-        Gold               = 0;
-        _pendingMaxHpHeal  = 0;
-        _initPhaseComplete = false;
-        PendingSource      = null;
-        CurrentRoomSource  = null;
+        IsActive                  = false;
+        CurrentHp                 = 0;
+        MaxHp                     = 0;
+        Gold                      = 0;
+        _pendingMaxHpHeal         = 0;
+        _initPhaseComplete        = false;
+        PendingSource             = null;
+        CurrentRoomSource         = null;
+        ActiveRunSettings         = default;
+        PendingSyncedRunSettings  = null;
         _log.Clear();
         TotalDamageTaken   = 0;
         TotalHealingGained = 0;
         TotalGoldEarned    = 0;
         TotalGoldSpent     = 0;
+        // Note: soullink_run.json is intentionally NOT deleted here.
+        // If the host re-starts the game and loads this save, the file must
+        // still exist so OnRunStart can restore the original run settings.
     }
 
     // ── Apply HP delta ────────────────────────────────────────────────────────
@@ -214,7 +264,7 @@ public static class SoulLinkSession
                 // already correct — don't scale it again.
                 delta = pendingHeal;
             }
-            else if (_initPhaseComplete && playerCount > 1)
+            else if (_initPhaseComplete && playerCount > 1 && ActiveRunSettings.SplitHeal)
             {
                 // Normal out-of-combat heal (campfire, event, etc.): scale by 1/playerCount
                 // so each player's heal contributes a proportional share to the shared pool.
@@ -241,9 +291,17 @@ public static class SoulLinkSession
     {
         int scaledDelta = delta;
 
-        // Scale out-of-combat max HP gains the same way as regular heals.
-        if (delta > 0 && !inCombat && playerCount > 1)
-            scaledDelta = Math.Max(1, (int)Math.Round((double)delta / playerCount, MidpointRounding.AwayFromZero));
+        // Scale out-of-combat MaxHP changes when the SplitMaxHp toggle is on.
+        // The toggle applies to BOTH gains and losses (fixes the previous bug where
+        // gains were split but losses were applied in full).
+        if (!inCombat && playerCount > 1 && ActiveRunSettings.SplitMaxHp)
+        {
+            // For losses (delta < 0) we floor toward zero so we never over-punish.
+            // For gains (delta > 0) we round normally (away from zero).
+            scaledDelta = delta < 0
+                ? -Math.Max(1, (int)Math.Round((double)-delta / playerCount, MidpointRounding.AwayFromZero))
+                : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
+        }
 
         MaxHp = Math.Max(1, MaxHp + scaledDelta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
@@ -286,7 +344,7 @@ public static class SoulLinkSession
     /// If blocked (e.g. Ectoplasm), the delta is logged but NOT applied.
     /// Returns the canonical gold value that should actually be written.
     /// </summary>
-    public static int ApplyGoldDelta(int delta, int playerSlot, bool blocked, string? blockSource = null, string? source = null)
+    public static int ApplyGoldDelta(int delta, int playerCount, int playerSlot, bool blocked, string? blockSource = null, string? source = null)
     {
         if (blocked)
         {
@@ -294,8 +352,16 @@ public static class SoulLinkSession
             return Gold; // no change
         }
 
-        Gold = Math.Max(0, Gold + delta);
-        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta, Source: source));
+        int scaledDelta = delta;
+        if (playerCount > 1 && ActiveRunSettings.SplitGold)
+        {
+            scaledDelta = delta < 0
+                ? -Math.Max(1, (int)Math.Round((double)-delta / playerCount, MidpointRounding.AwayFromZero))
+                : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
+        }
+
+        Gold = Math.Max(0, Gold + scaledDelta);
+        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, scaledDelta, Source: source));
         return Gold;
     }
 
