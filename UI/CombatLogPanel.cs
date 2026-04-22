@@ -75,7 +75,8 @@ public class CombatLogPanel : Control
             };
             // Fill the panel
             _label.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-            _label.AddThemeFontSizeOverride("normal_font_size", 14);
+            _label.AddThemeFontSizeOverride("normal_font_size", 15);
+            SoulLinkFont.Apply(_label);
             AddChild(_label);
 
             GD.Print($"[SoulLink] CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
@@ -185,7 +186,7 @@ public class CombatLogPanel : Control
         else if (md < 0)
         {
             segs.Add(($"lost {-md} max HP", HexDamage));
-            AppendSource(segs, "from", e.Source);
+            AppendSource(segs, "via", e.Source);
         }
 
         return segs;
@@ -207,7 +208,7 @@ public class CombatLogPanel : Control
         else
         {
             segs.Add(($"spent {-e.Delta} gold", HexGoldSpend));
-            AppendSource(segs, "on", e.Source);
+            AppendSource(segs, "via", e.Source);
         }
 
         return segs;

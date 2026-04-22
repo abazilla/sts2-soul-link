@@ -14,12 +14,9 @@ namespace SoulLinkMod.UI;
 /// actual HP, the sync patch didn't fire on this process for that change (stale
 /// session — displayed in orange).
 ///
-/// Cumulative run totals (damage, healing, gold) are intentionally omitted here;
-/// they are already shown by RunStatsPanel.
-///
 /// Visible whenever a Soul Link session is active (combat and non-combat).
-/// Collapsible and draggable. Added as a child of every room node by RoomReadyPatch.
-/// Polls via _Process so it stays current without sync-patch hooks.
+/// Collapsible. Polls via _Process so it stays current without sync-patch hooks.
+/// When collapsed, the content background is hidden; only the header button remains.
 /// </summary>
 public class DebugOverlay : Control
 {
@@ -28,27 +25,21 @@ public class DebugOverlay : Control
     private const int MaxPlayers = 4;
     private const float PanelW   = 220f;
     private const float PanelH   = 140f;
-
-    // Persists position across room transitions.
-    private static float _savedLeft = 10f;
-    private static float _savedTop  = 90f;
+    private const float AnchorV  = 0.5f;
+    private const float OffLeft  = 10f;
+    private const float OffTop   = 90f;
 
     private bool _expanded = true;
     private Button? _toggleButton;
-    private VBoxContainer? _content;
-    private Label? _versionLbl;
+    private PanelContainer? _bgPanel;
     private Label? _sessionHpLbl;
     private Label? _sessionGoldLbl;
     private readonly Label[] _playerLbls = new Label[MaxPlayers];
 
-    private bool _dragging;
-    private Vector2 _dragStart;
-    private Vector2 _posStart;
-
-    private static readonly Color ColorHp      = new(0.6f, 1f,   0.6f, 1f);
-    private static readonly Color ColorGold    = new(1f,   0.9f, 0f,   1f);
-    private static readonly Color ColorPlayer  = new(0.8f, 0.8f, 1f,   1f);
-    private static readonly Color ColorMismatch= new(1f,   0.4f, 0.1f, 1f);
+    private static readonly Color ColorHp       = new(0.6f, 1f,   0.6f, 1f);
+    private static readonly Color ColorGold     = new(1f,   0.9f, 0f,   1f);
+    private static readonly Color ColorPlayer   = new(0.8f, 0.8f, 1f,   1f);
+    private static readonly Color ColorMismatch = new(1f,   0.4f, 0.1f, 1f);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -58,13 +49,12 @@ public class DebugOverlay : Control
         {
             Current = this;
 
-            // Anchor to middle-left, below RunStatsPanel (which occupies -80..+80).
-            AnchorLeft = 0f; AnchorRight  = 0f;
-            AnchorTop  = 0.5f; AnchorBottom = 0.5f;
-            OffsetLeft   = _savedLeft;
-            OffsetTop    = _savedTop;
-            OffsetRight  = _savedLeft + PanelW;
-            OffsetBottom = _savedTop  + PanelH;
+            AnchorLeft   = 0f;      AnchorRight  = 0f;
+            AnchorTop    = AnchorV; AnchorBottom = AnchorV;
+            OffsetLeft   = OffLeft;
+            OffsetTop    = OffTop;
+            OffsetRight  = OffLeft + PanelW;
+            OffsetBottom = OffTop  + PanelH;
 
             MouseFilter = MouseFilterEnum.Pass;
             SetProcess(true);
@@ -90,45 +80,58 @@ public class DebugOverlay : Control
 
     private void BuildUI()
     {
-        var bg = new PanelContainer();
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        bg.MouseFilter = MouseFilterEnum.Pass;
-        AddChild(bg);
+        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+        vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        AddChild(vbox);
 
-        var vbox = new VBoxContainer();
-        vbox.MouseFilter = MouseFilterEnum.Pass;
-        bg.AddChild(vbox);
-
-        _toggleButton = new Button { Text = "Soul Link Debug −" };
+        // Header button — borderless, looks like a plain clickable label.
+        _toggleButton = new Button { Text = $"Soul Link Debug ({BuildInfo.Version}) v" };
         _toggleButton.Pressed += OnToggle;
+        ApplyHeaderButtonStyle(_toggleButton);
+        SoulLinkFont.Apply(_toggleButton);
         vbox.AddChild(_toggleButton);
 
-        _content = new VBoxContainer();
-        _content.MouseFilter = MouseFilterEnum.Pass;
-        vbox.AddChild(_content);
+        // Content background — hidden when collapsed.
+        _bgPanel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+        vbox.AddChild(_bgPanel);
 
-        _versionLbl     = MakeLabel();
+        var content = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        _bgPanel.AddChild(content);
+
         _sessionHpLbl   = MakeLabel();
         _sessionGoldLbl = MakeLabel();
-        _content.AddChild(_versionLbl);
-        _content.AddChild(_sessionHpLbl);
-        _content.AddChild(_sessionGoldLbl);
+        content.AddChild(_sessionHpLbl);
+        content.AddChild(_sessionGoldLbl);
 
-        _content.AddChild(new HSeparator());
+        content.AddChild(new HSeparator());
 
         var playerHeader = MakeLabel();
         playerHeader.Text = "Game HP (actual):";
-        _content.AddChild(playerHeader);
+        content.AddChild(playerHeader);
 
         for (int i = 0; i < MaxPlayers; i++)
         {
             _playerLbls[i] = MakeLabel();
-            _content.AddChild(_playerLbls[i]);
+            content.AddChild(_playerLbls[i]);
         }
     }
 
     private static Label MakeLabel()
-        => new() { HorizontalAlignment = HorizontalAlignment.Left };
+    {
+        var lbl = new Label { HorizontalAlignment = HorizontalAlignment.Left };
+        SoulLinkFont.Apply(lbl);
+        return lbl;
+    }
+
+    private static void ApplyHeaderButtonStyle(Button btn)
+    {
+        var empty = new StyleBoxEmpty();
+        btn.AddThemeStyleboxOverride("normal",   empty);
+        btn.AddThemeStyleboxOverride("hover",    empty);
+        btn.AddThemeStyleboxOverride("pressed",  empty);
+        btn.AddThemeStyleboxOverride("focus",    empty);
+        btn.AddThemeStyleboxOverride("disabled", empty);
+    }
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
@@ -136,44 +139,6 @@ public class DebugOverlay : Control
     {
         try { DoRefresh(); }
         catch (Exception ex) { GD.PrintErr($"[SoulLink] DebugOverlay._Process crashed: {ex}"); }
-        try { HandleDrag(); }
-        catch { /* don't let drag errors crash the overlay */ }
-    }
-
-    private void HandleDrag()
-    {
-        var viewport = GetViewport();
-        if (viewport == null) return;
-
-        var mousePos   = viewport.GetMousePosition();
-        bool mouseDown = Input.IsMouseButtonPressed(MouseButton.Left);
-
-        if (!_dragging && mouseDown)
-        {
-            bool inPanel  = GetGlobalRect().HasPoint(mousePos);
-            bool onButton = _toggleButton != null && _toggleButton.GetGlobalRect().HasPoint(mousePos);
-            if (inPanel && !onButton)
-            {
-                _dragging  = true;
-                _dragStart = mousePos;
-                _posStart  = new Vector2(OffsetLeft, OffsetTop);
-            }
-        }
-        else if (_dragging && !mouseDown)
-        {
-            _dragging  = false;
-            _savedLeft = OffsetLeft;
-            _savedTop  = OffsetTop;
-        }
-
-        if (_dragging)
-        {
-            var d = mousePos - _dragStart;
-            OffsetLeft   = _posStart.X + d.X;
-            OffsetTop    = _posStart.Y + d.Y;
-            OffsetRight  = OffsetLeft + PanelW;
-            OffsetBottom = OffsetTop  + PanelH;
-        }
     }
 
     private void DoRefresh()
@@ -181,9 +146,8 @@ public class DebugOverlay : Control
         Visible = SoulLinkSession.IsActive;
         if (!Visible) return;
 
-        Set(_versionLbl,     BuildInfo.Version,                                                        new Color(0.6f, 0.6f, 0.6f, 1f));
         Set(_sessionHpLbl,   $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
-        Set(_sessionGoldLbl, $"Session Gold:  {SoulLinkSession.Gold}",                               ColorGold);
+        Set(_sessionGoldLbl, $"Session Gold:  {SoulLinkSession.Gold}",                              ColorGold);
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
         for (int i = 0; i < MaxPlayers; i++)
@@ -192,12 +156,12 @@ public class DebugOverlay : Control
 
             if (runState != null && i < runState.Players.Count)
             {
-                var p        = runState.Players[i];
-                int actual   = p.Creature.CurrentHp;
-                int max      = p.Creature.MaxHp;
-                string name  = p.Character.GetType().Name;
-                bool mismatch= actual != SoulLinkSession.CurrentHp;
-                _playerLbls[i].Text    = $"P{i} {name}: {actual}/{max}";
+                var p       = runState.Players[i];
+                int actual  = p.Creature.CurrentHp;
+                int max     = p.Creature.MaxHp;
+                string name = p.Character.GetType().Name;
+                bool mismatch = actual != SoulLinkSession.CurrentHp;
+                _playerLbls[i].Text = $"P{i} {name}: {actual}/{max}";
                 _playerLbls[i].AddThemeColorOverride("font_color", mismatch ? ColorMismatch : ColorPlayer);
                 _playerLbls[i].Visible = true;
             }
@@ -207,11 +171,11 @@ public class DebugOverlay : Control
             }
         }
 
-        if (_content != null)
-            _content.Visible = _expanded;
+        if (_bgPanel != null)
+            _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
-            _toggleButton.Text = _expanded ? "Soul Link Debug −" : "Soul Link Debug +";
+            _toggleButton.Text = $"Soul Link Debug ({BuildInfo.Version}) {(_expanded ? "v" : ">")}";
     }
 
     private static void Set(Label? lbl, string text, Color color)
@@ -226,5 +190,4 @@ public class DebugOverlay : Control
         _expanded = !_expanded;
         DoRefresh();
     }
-
 }
