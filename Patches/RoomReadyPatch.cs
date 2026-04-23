@@ -123,8 +123,7 @@ internal static class RoomPanelInjector
             {
                 SplitMaxHp = rs.SplitMaxHp,
                 SplitHeal  = rs.SplitHeal,
-                ShareGold  = rs.ShareGold,
-                SplitGold  = rs.SplitGold,
+                GoldMode   = (int)rs.GoldMode,
             });
             GD.Print("[SoulLink] Re-sent settings sync from host at room entry.");
         }

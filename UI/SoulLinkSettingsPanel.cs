@@ -18,9 +18,9 @@ public class SoulLinkSettingsPanel : Control
     public static SoulLinkSettingsPanel? Current;
 
     // Panel dimensions
-    private const float PanelW       = 300f;
-    private const float LeftMargin   = 16f;
-    private const float BottomMargin = 16f;
+    private const float PanelW        = 300f;
+    private const float RightMargin   = 16f;
+    private const float TopMargin     = 16f;
 
     // Colours (matching the rest of the mod's palette)
     private static readonly Color ColHeader   = new Color("cccccc");
@@ -30,11 +30,10 @@ public class SoulLinkSettingsPanel : Control
 
     private bool _isClientMode; // true = client; run settings are read-only
 
-    // Run setting checkboxes
-    private CheckBox? _cbSplitMaxHp;
-    private CheckBox? _cbSplitHeal;
-    private CheckBox? _cbShareGold;
-    private CheckBox? _cbSplitGold;
+    // Run setting controls
+    private CheckBox?     _cbSplitMaxHp;
+    private CheckBox?     _cbSplitHeal;
+    private OptionButton? _goldModeOption;
 
     // Panel visibility checkboxes
     private CheckBox? _cbShowCombatLog;
@@ -54,13 +53,13 @@ public class SoulLinkSettingsPanel : Control
             Current = this;
             Visible = false;
 
-            // Anchor to bottom-left corner.
-            AnchorLeft = AnchorRight = 0f;
-            AnchorTop = AnchorBottom = 1f;
-            OffsetLeft   = LeftMargin;
-            OffsetRight  = LeftMargin + PanelW;
-            OffsetBottom = -BottomMargin;
-            OffsetTop    = -BottomMargin - EstimatedHeight();
+            // Anchor to top-right corner.
+            AnchorLeft = AnchorRight = 1f;
+            AnchorTop = AnchorBottom = 0f;
+            OffsetRight  = -RightMargin;
+            OffsetLeft   = -RightMargin - PanelW;
+            OffsetTop    = TopMargin;
+            OffsetBottom = TopMargin + EstimatedHeight();
 
             MouseFilter = MouseFilterEnum.Stop; // consume clicks so they don't fall through
 
@@ -81,10 +80,12 @@ public class SoulLinkSettingsPanel : Control
         _isClientMode = !isHost;
         Visible = true;
         Refresh();
+        // Notify connected clients of current host settings as soon as the lobby is ready.
+        if (isHost) SoulLinkSession.TrySendSettingsSync();
     }
 
     /// <summary>
-    /// Updates all checkbox states to match current settings and locks/unlocks controls.
+    /// Updates all control states to match current settings and locks/unlocks controls.
     /// Called by SettingsSyncHandler on the client after host settings arrive.
     /// </summary>
     public void Refresh()
@@ -126,27 +127,31 @@ public class SoulLinkSettingsPanel : Control
         vbox.AddChild(MakeLabel("  RUN SETTINGS  (host only)", ColSection, 12));
 
         _cbSplitMaxHp = MakeCheckBox("Split MaxHP changes by players");
-        _cbSplitMaxHp.Toggled += on => { SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); };
+        _cbSplitMaxHp.Toggled += on => { SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(_cbSplitMaxHp);
 
         _cbSplitHeal = MakeCheckBox("Split healing by players");
-        _cbSplitHeal.Toggled += on => { SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); };
+        _cbSplitHeal.Toggled += on => { SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(_cbSplitHeal);
 
-        _cbShareGold = MakeCheckBox("Share gold pool");
-        _cbShareGold.Toggled += on =>
-        {
-            SoulLinkSettings.Instance.ShareGold = on;
-            SoulLinkSettings.Save();
-            // SplitGold is only meaningful when gold is shared.
-            if (_cbSplitGold != null)
-                _cbSplitGold.Disabled = !(on && !_isClientMode && !SoulLinkSession.IsActive);
-        };
-        vbox.AddChild(_cbShareGold);
+        vbox.AddChild(MakeLabel("  Gold mode:", ColSection, 12));
 
-        _cbSplitGold = MakeCheckBox("Split gold changes by players");
-        _cbSplitGold.Toggled += on => { SoulLinkSettings.Instance.SplitGold = on; SoulLinkSettings.Save(); };
-        vbox.AddChild(_cbSplitGold);
+        _goldModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
+        _goldModeOption.AddItem("Default (STS2 native)",    (int)GoldSharingMode.Default);
+        _goldModeOption.AddItem("Share gold pool",          (int)GoldSharingMode.SharedPool);
+        _goldModeOption.AddItem("Split gold by players",    (int)GoldSharingMode.SplitByPlayer);
+        _goldModeOption.AddThemeFontSizeOverride("font_size", 13);
+        SoulLinkFont.Apply(_goldModeOption);
+        _goldModeOption.ItemSelected += idx =>
+        {
+            SoulLinkSettings.Instance.GoldMode = (GoldSharingMode)_goldModeOption.GetItemId((int)idx);
+            SoulLinkSettings.Save();
+            if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
+        };
+        var popup = _goldModeOption.GetPopup();
+        SoulLinkFont.Apply(popup);
+        popup.AddThemeFontSizeOverride("font_size", 13);
+        vbox.AddChild(_goldModeOption);
 
         vbox.AddChild(MakeSeparator());
 
@@ -166,7 +171,7 @@ public class SoulLinkSettingsPanel : Control
         vbox.AddChild(_cbShowDebugOverlay);
 
         // Size the panel now that we know content height.
-        OffsetTop = OffsetBottom - EstimatedHeight();
+        OffsetBottom = OffsetTop + EstimatedHeight();
     }
 
     // ── Refresh logic ─────────────────────────────────────────────────────────
@@ -179,29 +184,35 @@ public class SoulLinkSettingsPanel : Control
         // Decide which values to display:
         // - Client during active run: show locked ActiveRunSettings from host.
         // - Everyone else: show current SoulLinkSettings.
-        bool splitMaxHp, splitHeal, shareGold, splitGold;
+        bool splitMaxHp, splitHeal;
+        GoldSharingMode goldMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
             splitMaxHp = rs.SplitMaxHp;
             splitHeal  = rs.SplitHeal;
-            shareGold  = rs.ShareGold;
-            splitGold  = rs.SplitGold;
+            goldMode   = rs.GoldMode;
         }
         else
         {
             var s = SoulLinkSettings.Instance;
             splitMaxHp = s.SplitMaxHp;
             splitHeal  = s.SplitHeal;
-            shareGold  = s.ShareGold;
-            splitGold  = s.SplitGold;
+            goldMode   = s.GoldMode;
         }
 
         SetCheckBox(_cbSplitMaxHp, splitMaxHp, runEditable);
         SetCheckBox(_cbSplitHeal,  splitHeal,  runEditable);
-        SetCheckBox(_cbShareGold,  shareGold,  runEditable);
-        // SplitGold only editable when ShareGold is on (and run is editable).
-        SetCheckBox(_cbSplitGold, splitGold, runEditable && shareGold);
+
+        if (_goldModeOption != null)
+        {
+            int itemIdx = _goldModeOption.GetItemIndex((int)goldMode);
+            if (itemIdx >= 0) _goldModeOption.Selected = itemIdx;
+            _goldModeOption.Disabled = !runEditable;
+            _goldModeOption.Modulate = runEditable
+                ? Colors.White
+                : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 1f);
+        }
 
         // Panel settings are always locally editable.
         var ls = SoulLinkSettings.Instance;
@@ -255,13 +266,8 @@ public class SoulLinkSettingsPanel : Control
     }
 
     /// <summary>
-    /// Rough height estimate based on fixed item count so we can set OffsetTop
-    /// before the panel is added to the layout tree (no measure pass available yet).
+    /// Rough height estimate: 1 header + 1 sep + 1 section + 2 checkboxes + 1 gold label +
+    /// 1 dropdown + 1 sep + 1 section + 3 checkboxes = 12 items × ~24px + 16px margins.
     /// </summary>
-    private static float EstimatedHeight()
-    {
-        // 1 header + 1 sep + 1 section label + 4 checkboxes + 1 sep + 1 section label + 3 checkboxes
-        // ≈ 12 items × ~24px + 16px margins
-        return 12 * 24f + 16f;
-    }
+    private static float EstimatedHeight() => 12 * 24f + 16f;
 }

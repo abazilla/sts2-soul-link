@@ -62,6 +62,8 @@ public static class CharSelectClientInitPatch
     [HarmonyPostfix]
     static void Postfix(Node __instance)
     {
+        // Register handler early so we can receive the host's settings in lobby.
+        SettingsSyncHandler.TryRegister();
         if (SoulLinkSettingsPanel.Current == null)
             LobbyPanelInjector.InjectPanel(__instance);
         SoulLinkSettingsPanel.Current?.Show(isHost: false);
@@ -80,6 +82,8 @@ public static class CharSelectClosedPatch
     static void Postfix()
     {
         SoulLinkSettingsPanel.Clear();
+        // Do NOT unregister SettingsSyncHandler here — the lobby close fires after run start,
+        // which would remove the handler mid-run. RunCleanUpPatch handles unregistration.
     }
 }
 
@@ -124,6 +128,7 @@ public static class CustomRunClientInitPatch
     [HarmonyPostfix]
     static void Postfix(Node __instance)
     {
+        SettingsSyncHandler.TryRegister();
         if (SoulLinkSettingsPanel.Current == null)
             LobbyPanelInjector.InjectPanel(__instance);
         SoulLinkSettingsPanel.Current?.Show(isHost: false);
@@ -142,6 +147,7 @@ public static class CustomRunClosedPatch
     static void Postfix()
     {
         SoulLinkSettingsPanel.Clear();
+        SettingsSyncHandler.TryUnregister();
     }
 }
 

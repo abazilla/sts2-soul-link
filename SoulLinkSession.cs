@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using Godot;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace SoulLinkMod;
 
 /// <summary>
 /// Holds the canonical shared state for a Soul Link session:
-/// one HP pool and one gold pool shared across all players.
+/// one HP pool shared across all players, and gold tracking per the active GoldMode.
 ///
 /// IsActive must be true before any patch logic fires.
 /// It is set to true by RunStartPatch once a multiplayer run is fully initialized,
@@ -25,7 +26,16 @@ public static class SoulLinkSession
 
     public static int CurrentHp  { get; private set; }
     public static int MaxHp      { get; private set; }
+
+    /// <summary>Canonical gold for SharedPool mode. Not used in Default or SplitByPlayer modes.</summary>
     public static int Gold       { get; private set; }
+
+    /// <summary>Per-player canonical gold for SplitByPlayer mode (indexed by player slot).</summary>
+    private static readonly int[] _playerGold = new int[4];
+
+    /// <summary>Returns the canonical gold for a specific player slot (SplitByPlayer mode).</summary>
+    public static int GetPlayerGold(int slot) =>
+        slot >= 0 && slot < _playerGold.Length ? _playerGold[slot] : 0;
 
     // ── Active run settings ───────────────────────────────────────────────────
 
@@ -112,14 +122,6 @@ public static class SoulLinkSession
             p.Creature.MaxHp > 0 ? p.Creature.MaxHp : p.Character.StartingHp;
 
         // Detect save-load vs fresh run.
-        // The game pre-initializes all creatures to MaxHp before Launch() fires, even on a
-        // brand-new run, so "CurrentHp > 0" is not a reliable fresh-run signal.
-        // Instead we combine two checks:
-        //   1. Any player has CurrentHp < MaxHp (they took damage since run start), OR
-        //      MaxHp > Character.StartingHp (max-HP upgrades were obtained).
-        //   2. Gold is no longer the starting amount (99) — meaning Neow or combat has fired.
-        // A fresh run passes both tests (all players at full base HP, gold still 99).
-        // A mid-run save fails at least one of them.
         const int StartingGold = 99;
         bool isSaveLoad = runState.Players[0].Gold != StartingGold;
         if (!isSaveLoad)
@@ -141,34 +143,19 @@ public static class SoulLinkSession
         int sharedCurrentHp;
         if (isSaveLoad)
         {
-            // Restore CurrentHp from save. All players should have the same HP due to soul link,
-            // but average in case of any transient divergence. Fall back to MaxHp if 0.
             sharedCurrentHp = RoundedAverage(runState.Players,
                 p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
             GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
-            // A save-load implies the run is past initialization — combat has already happened.
             _initPhaseComplete = true;
         }
         else
         {
-            // Fresh run: the game pre-initializes creatures to full HP, so we match that.
-            // Neow will immediately reset HP to 0 then heal to the ascension-scaled value
-            // (e.g. 64 for A2 Ironclad). During _initPhaseComplete=false, those heals are
-            // applied without playerCount scaling — Neow fires per-player but the reset+heal
-            // pairs resolve correctly to the intended starting HP.
             sharedCurrentHp = sharedMaxHp;
             _initPhaseComplete = false;
             GD.Print($"[SoulLink] Fresh run — init phase active. MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp} (Neow will adjust to ascension-scaled value).");
         }
 
-        int sharedGold = runState.Players[0].Gold;  // all players start with the same gold
-
         // Determine which run settings to use.
-        // Priority:
-        //   1. PendingSyncedRunSettings — host already sent us settings before our Launch fired (client timing).
-        //   2. Save-load file — restores the original host's settings from when the run started.
-        //   3. Fresh run — use this peer's current settings preferences (only the host should reach here
-        //      in normal operation; the client will receive the sync message shortly after).
         if (PendingSyncedRunSettings.HasValue)
         {
             ActiveRunSettings = PendingSyncedRunSettings.Value;
@@ -189,11 +176,28 @@ public static class SoulLinkSession
 
         // Always re-save so re-hosting from this save will see the correct settings.
         SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
-        GD.Print($"[SoulLink] Run settings: SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, ShareGold={ActiveRunSettings.ShareGold}, SplitGold={ActiveRunSettings.SplitGold}");
+        GD.Print($"[SoulLink] Run settings: SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
 
         MaxHp     = sharedMaxHp;
         CurrentHp = sharedCurrentHp;
-        Gold      = sharedGold;
+
+        // Always initialize _playerGold from current player values as a defensive baseline.
+        // This prevents stale zeros if ActiveRunSettings.GoldMode changes after OnRunStart
+        // (e.g. the client's local default differs from the host's setting that arrives shortly after).
+        for (int i = 0; i < runState.Players.Count && i < _playerGold.Length; i++)
+            _playerGold[i] = runState.Players[i].Gold;
+        for (int i = runState.Players.Count; i < _playerGold.Length; i++)
+            _playerGold[i] = 0;
+
+        switch (ActiveRunSettings.GoldMode)
+        {
+            case GoldSharingMode.SharedPool:
+                Gold = runState.Players[0].Gold; // all players start with same gold
+                break;
+            default: // Default and SplitByPlayer: Gold field unused
+                Gold = 0;
+                break;
+        }
 
         // On a save-load keep cumulative totals — the run is continuing, not starting fresh.
         if (!isSaveLoad)
@@ -217,6 +221,8 @@ public static class SoulLinkSession
         CurrentHp                 = 0;
         MaxHp                     = 0;
         Gold                      = 0;
+        for (int i = 0; i < _playerGold.Length; i++)
+            _playerGold[i] = 0;
         _pendingMaxHpHeal         = 0;
         _initPhaseComplete        = false;
         PendingSource             = null;
@@ -268,14 +274,10 @@ public static class SoulLinkSession
             {
                 // Normal out-of-combat heal (campfire, event, etc.): scale by 1/playerCount
                 // so each player's heal contributes a proportional share to the shared pool.
-                // Use the unclamped heal amount from HealInternal if available, so that
-                // near-full players don't get double-penalized (game clamps to MaxHp before
-                // the setter fires, then we'd divide the already-reduced delta).
                 int baseForScaling = unclampedHeal > 0 ? unclampedHeal : rawDelta;
                 delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
             }
-            // If !_initPhaseComplete: this is the Neow/initialization heal. Apply in full —
-            // it fires only once (for one player), so no playerCount division needed.
+            // If !_initPhaseComplete: Neow/initialization heal — apply in full.
         }
 
         CurrentHp = Math.Clamp(CurrentHp + delta, 0, MaxHp);
@@ -292,12 +294,9 @@ public static class SoulLinkSession
         int scaledDelta = delta;
 
         // Scale out-of-combat MaxHP changes when the SplitMaxHp toggle is on.
-        // The toggle applies to BOTH gains and losses (fixes the previous bug where
-        // gains were split but losses were applied in full).
+        // Applies to BOTH gains and losses.
         if (!inCombat && playerCount > 1 && ActiveRunSettings.SplitMaxHp)
         {
-            // For losses (delta < 0) we floor toward zero so we never over-punish.
-            // For gains (delta > 0) we round normally (away from zero).
             scaledDelta = delta < 0
                 ? -Math.Max(1, (int)Math.Round((double)-delta / playerCount, MidpointRounding.AwayFromZero))
                 : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
@@ -306,10 +305,6 @@ public static class SoulLinkSession
         MaxHp = Math.Max(1, MaxHp + scaledDelta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
 
-        // When MaxHP increases, the game fires a follow-up CurrentHp write equal to
-        // the scaled delta (it reads back the already-redirected MaxHp value to compute
-        // the heal amount). Mark that the next out-of-combat heal should NOT be scaled
-        // a second time — it's already been scaled here.
         if (scaledDelta > 0)
             _pendingMaxHpHeal = scaledDelta;
 
@@ -319,13 +314,20 @@ public static class SoulLinkSession
     // ── Apply Gold delta ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Sets canonical gold directly to the given value without computing a delta or logging.
-    /// Called by the SoulLinkGoldSyncMessage handler on the receiving peer so it mirrors
-    /// the sender's canonical value without double-counting.
+    /// Sets canonical gold directly without logging. Called by GoldSyncHandler on the
+    /// receiving peer to mirror the sender's canonical value.
     /// </summary>
-    public static void SetGoldDirect(int canonical)
+    public static void SetGoldDirect(int canonical, int playerSlot = 0)
     {
-        Gold = Math.Max(0, canonical);
+        if (ActiveRunSettings.GoldMode == GoldSharingMode.SplitByPlayer)
+        {
+            if (playerSlot >= 0 && playerSlot < _playerGold.Length)
+                _playerGold[playerSlot] = Math.Max(0, canonical);
+        }
+        else
+        {
+            Gold = Math.Max(0, canonical);
+        }
     }
 
     /// <summary>
@@ -340,29 +342,65 @@ public static class SoulLinkSession
     }
 
     /// <summary>
-    /// Called from GoldSyncPatch. Updates the canonical gold pool.
+    /// Called from GoldSyncPatch. Updates the canonical gold pool per the active GoldMode.
     /// If blocked (e.g. Ectoplasm), the delta is logged but NOT applied.
-    /// Returns the canonical gold value that should actually be written.
+    /// Returns the canonical gold value that should actually be written to the player.
     /// </summary>
     public static int ApplyGoldDelta(int delta, int playerCount, int playerSlot, bool blocked, string? blockSource = null, string? source = null)
     {
+        int currentCanonical = ActiveRunSettings.GoldMode == GoldSharingMode.SplitByPlayer
+            ? GetPlayerGold(playerSlot)
+            : Gold;
+
         if (blocked)
         {
             AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta, 0, blockSource, Blocked: true));
-            return Gold; // no change
+            return currentCanonical;
         }
 
-        int scaledDelta = delta;
-        if (playerCount > 1 && ActiveRunSettings.SplitGold)
+        switch (ActiveRunSettings.GoldMode)
         {
-            scaledDelta = delta < 0
-                ? -Math.Max(1, (int)Math.Round((double)-delta / playerCount, MidpointRounding.AwayFromZero))
-                : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
-        }
+            case GoldSharingMode.SharedPool:
+            {
+                // One pool shared by all: gains and spends go directly to/from the pool.
+                Gold = Math.Max(0, Gold + delta);
+                AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, delta, Source: source));
+                return Gold;
+            }
+            case GoldSharingMode.SplitByPlayer:
+            {
+                // Each player's own pool.
+                // Gains are divided by playerCount so the windfall is shared proportionally.
+                // Spends come only from the buyer's pool in full.
+                int scaledDelta;
+                if (delta > 0 && playerCount > 1)
+                    scaledDelta = Math.Max(1, (int)Math.Round((double)delta / playerCount, MidpointRounding.AwayFromZero));
+                else
+                    scaledDelta = delta;
 
-        Gold = Math.Max(0, Gold + scaledDelta);
-        AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, scaledDelta, Source: source));
-        return Gold;
+                // Update the triggering player's pool.
+                _playerGold[playerSlot] = Math.Max(0, _playerGold[playerSlot] + scaledDelta);
+                AddEntry(new LogEntry(LogEntryType.Gold, playerSlot, scaledDelta, Source: source));
+
+                // For gains, proactively update all OTHER slots on this machine so the
+                // mirror loop in GoldSyncPatch writes the correct canonical to proxy players.
+                // The receiver machine will apply the same delta independently when it handles
+                // the broadcast (and will log their own gain there).
+                if (scaledDelta > 0)
+                {
+                    for (int i = 0; i < playerCount && i < _playerGold.Length; i++)
+                    {
+                        if (i == playerSlot) continue;
+                        _playerGold[i] = Math.Max(0, _playerGold[i] + scaledDelta);
+                    }
+                }
+
+                return _playerGold[playerSlot];
+            }
+            default:
+                // Default mode — GoldSyncPatch returns early before calling here.
+                return 0;
+        }
     }
 
     // ── Write canonical state to all players ─────────────────────────────────
@@ -376,16 +414,67 @@ public static class SoulLinkSession
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
-            foreach (var player in runState.Players)
+            for (int i = 0; i < runState.Players.Count; i++)
             {
+                var player = runState.Players[i];
                 player.Creature.SetMaxHp(MaxHp);
                 player.Creature.SetCurrentHp(CurrentHp);
-                player.Gold = Gold;
+
+                switch (ActiveRunSettings.GoldMode)
+                {
+                    case GoldSharingMode.SharedPool:
+                        player.Gold = Gold;
+                        break;
+                    case GoldSharingMode.SplitByPlayer:
+                        if (i < _playerGold.Length)
+                            player.Gold = _playerGold[i];
+                        break;
+                    // Default: don't touch gold — STS2 manages it natively.
+                }
             }
         }
         finally
         {
             SoulLinkMod.ApplyingCanonical = false;
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Re-reads per-player gold from actual player objects. Called when GoldMode changes
+    /// to SplitByPlayer after OnRunStart (settings sync timing), so _playerGold[] reflects
+    /// what the game currently has rather than stale zeros.
+    /// </summary>
+    internal static void ReinitPlayerGold(RunState runState)
+    {
+        for (int i = 0; i < runState.Players.Count && i < _playerGold.Length; i++)
+            _playerGold[i] = runState.Players[i].Gold;
+        GD.Print($"[SoulLink] ReinitPlayerGold: P0={_playerGold[0]}, P1={_playerGold[1]}");
+    }
+
+    /// <summary>
+    /// Attempts to broadcast current SoulLinkSettings to connected peers.
+    /// Useful in the lobby so the client's read-only panel stays in sync with the host.
+    /// No-op if NetService is unavailable.
+    /// </summary>
+    public static void TrySendSettingsSync()
+    {
+        try
+        {
+            var net = RunManager.Instance?.NetService;
+            if (net == null) return;
+            var s = SoulLinkSettings.Instance;
+            net.SendMessage(new SoulLinkSettingsSyncMessage
+            {
+                SplitMaxHp = s.SplitMaxHp,
+                SplitHeal  = s.SplitHeal,
+                GoldMode   = (int)s.GoldMode,
+            });
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[SoulLink] TrySendSettingsSync failed: {ex.Message}");
         }
     }
 

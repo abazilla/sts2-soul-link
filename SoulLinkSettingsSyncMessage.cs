@@ -15,8 +15,8 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
 {
     public bool SplitMaxHp;
     public bool SplitHeal;
-    public bool ShareGold;
-    public bool SplitGold;
+    /// <summary>Cast of <see cref="GoldSharingMode"/> — serialized as int for wire format.</summary>
+    public int GoldMode;
 
     public bool ShouldBroadcast => false;
     public NetTransferMode Mode => NetTransferMode.Reliable;
@@ -26,15 +26,13 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
     {
         writer.WriteBool(SplitMaxHp);
         writer.WriteBool(SplitHeal);
-        writer.WriteBool(ShareGold);
-        writer.WriteBool(SplitGold);
+        writer.WriteInt(GoldMode);
     }
 
     public void Deserialize(PacketReader reader)
     {
         SplitMaxHp = reader.ReadBool();
         SplitHeal  = reader.ReadBool();
-        ShareGold  = reader.ReadBool();
-        SplitGold  = reader.ReadBool();
+        GoldMode   = reader.ReadInt();
     }
 }

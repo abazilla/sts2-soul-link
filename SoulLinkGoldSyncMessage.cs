@@ -24,7 +24,7 @@ public struct SoulLinkGoldSyncMessage : INetMessage, IPacketSerializable
     /// <summary>Slot index of the player whose gold changed.</summary>
     public int PlayerSlot;
 
-    public bool ShouldBroadcast => true;
+    public bool ShouldBroadcast => false;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 

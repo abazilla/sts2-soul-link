@@ -22,4 +22,9 @@ internal static class SoulLinkFont
     {
         if (Kreon != null) rtl.AddThemeFontOverride("normal_font", Kreon);
     }
+
+    internal static void Apply(PopupMenu popup)
+    {
+        if (Kreon != null) popup.AddThemeFontOverride("font", Kreon);
+    }
 }

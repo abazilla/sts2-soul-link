@@ -10,26 +10,24 @@ using MegaCrit.Sts2.Core.Multiplayer.Game;
 namespace SoulLinkMod.Patches;
 
 /// <summary>
-/// Patches Player.Gold setter to manage the shared gold pool for all players.
+/// Patches Player.Gold setter to manage gold per the active GoldSharingMode.
 ///
-/// Two paths:
+/// THREE MODES:
 ///
-/// LOCAL PLAYER — a legitimate game event changed this player's gold (combat reward,
-///   purchase, Neow bonus, etc.).  Calculate the delta, apply it to the canonical pool,
-///   redirect the setter value to canonical, mirror it to all other player objects on
-///   this machine, and broadcast the canonical to the other machine.
+/// Default — returns early; STS2 manages gold natively, Soul Link doesn't intercept.
 ///
-/// REMOTE PLAYER — STS2's own periodic state-sync is writing the remote player's gold
-///   from their home machine.  That packet may carry a stale value (e.g. Machine A still
-///   shows 99 gold because our SoulLinkGoldSyncMessage hasn't arrived yet).  We redirect
-///   the value to canonical so the backing field is never clobbered with stale data.
-///   This is what keeps the backing field correct on both machines, which is what STS2's
-///   ChecksumTracker reads when it generates the per-room checksum.
+/// SharedPool — one canonical pool.  Local player: compute delta, update pool, mirror
+///   canonical to all other player objects on this machine, broadcast.
+///   Remote player: redirect stale STS2-sync write back to canonical so the backing
+///   field is never clobbered.
 ///
-/// Note: we do NOT patch the getter.  Patching the getter made STS2's setter body see
-///   old == new (because canonical was updated in our prefix before the setter ran), so
-///   STS2 suppressed its GoldChanged event and the UI gold display stopped updating.
-///   Blocking stale remote writes through the setter is sufficient and avoids that issue.
+/// SplitByPlayer — each player has their own pool.  Local player gains are divided
+///   by playerCount; spends are full.  Mirror keeps other player objects showing their
+///   own _playerGold[] values.  Broadcast carries this player's new canonical.
+///   Remote player: redirect to that player's _playerGold[] value.
+///
+/// Note: ShouldBroadcast=false on SoulLinkGoldSyncMessage so the host does NOT
+/// process its own message (preventing double-logging with scaled deltas).
 /// </summary>
 [HarmonyPatch(typeof(Player))]
 public static class GoldSyncPatch
@@ -57,19 +55,20 @@ public static class GoldSyncPatch
         }
         if (playerSlot < 0) return;
 
-        // ── Gold not shared ─────────────────────────────────────────────────────
-        // When gold sharing is disabled each player owns their own gold.
-        // Skip the entire patch — no canonical redirect, no broadcast — and let
-        // STS2's own SerializablePlayer state sync keep both machines consistent.
-        if (!SoulLinkSession.ActiveRunSettings.ShareGold) return;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+
+        // ── Default mode ────────────────────────────────────────────────────────
+        // STS2 native gold — Soul Link doesn't intercept anything.
+        if (goldMode == GoldSharingMode.Default) return;
 
         // ── Remote player ───────────────────────────────────────────────────────
-        // STS2's periodic sync is writing this player's gold from their home machine.
-        // The packet may be stale (sent before our GoldSyncMessage arrived there),
-        // so redirect to canonical to keep the backing field consistent for checksums.
+        // STS2's periodic sync may carry a stale value. Redirect to canonical
+        // so the backing field is never clobbered.
         if (!LocalContext.IsMe(__instance))
         {
-            value = SoulLinkSession.Gold;
+            value = goldMode == GoldSharingMode.SplitByPlayer
+                ? SoulLinkSession.GetPlayerGold(playerSlot)
+                : SoulLinkSession.Gold;
             return;
         }
 
@@ -80,29 +79,38 @@ public static class GoldSyncPatch
         int playerCount = runState.Players.Count;
 
         // Check for Ectoplasm or STS2 equivalent gold-blocking relic.
-        // TODO: verify the STS2 relic ID for the Ectoplasm equivalent.
         bool blocked = delta > 0 && __instance.Relics.Any(r =>
             r.Id?.Entry == "Ectoplasm");
 
         string? source = SoulLinkSession.PendingSource
             ?? SoulLinkSession.CurrentRoomSource;
         SoulLinkSession.PendingSource = null;
+
+        // Capture pre-call canonical so we can compute the actual applied delta.
+        int prevCanonical = goldMode == GoldSharingMode.SplitByPlayer
+            ? SoulLinkSession.GetPlayerGold(playerSlot)
+            : SoulLinkSession.Gold;
+
         int canonical = SoulLinkSession.ApplyGoldDelta(delta, playerCount, playerSlot, blocked,
             blockSource: blocked ? "Ectoplasm" : null,
             source: blocked ? null : source);
+        int broadcastDelta = canonical - prevCanonical;
 
-        // Redirect the local player's gold to the canonical total.
+        // Redirect the local player's gold to the canonical value.
         value = canonical;
 
-        // Mirror canonical to all other players on this machine immediately —
-        // don't wait for STS2's next sync cycle (which may arrive after the checksum).
+        // Mirror canonical to all other players on this machine immediately.
+        // In SharedPool: everyone sees the same canonical.
+        // In SplitByPlayer: each player object shows their own _playerGold[] value.
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
-            foreach (var player in runState.Players)
+            for (int i = 0; i < runState.Players.Count; i++)
             {
-                if (player != __instance)
-                    player.Gold = canonical;
+                if (runState.Players[i] == __instance) continue;
+                runState.Players[i].Gold = goldMode == GoldSharingMode.SplitByPlayer
+                    ? SoulLinkSession.GetPlayerGold(i)
+                    : canonical;
             }
         }
         finally
@@ -110,12 +118,11 @@ public static class GoldSyncPatch
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Broadcast the canonical gold to the other machine, including delta and slot
-        // so the receiver can log the change in their kill-feed.
+        // Broadcast the canonical gold and the actual scaled delta.
         RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
         {
             CanonicalGold = canonical,
-            Delta         = delta,
+            Delta         = broadcastDelta,
             PlayerSlot    = playerSlot,
         });
 

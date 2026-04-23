@@ -59,7 +59,6 @@ public class DebugOverlay : Control
             OffsetBottom = OffTop  + PanelH;
 
             MouseFilter = MouseFilterEnum.Pass;
-            SetProcess(true);
 
             BuildUI();
             DoRefresh();
@@ -144,23 +143,25 @@ public class DebugOverlay : Control
 
     // ── Refresh ───────────────────────────────────────────────────────────────
 
-    public override void _Process(double _delta)
-    {
-        try { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] DebugOverlay._Process crashed: {ex}"); }
-    }
-
     private void DoRefresh()
     {
         Visible = SoulLinkSession.IsActive;
         if (!Visible) return;
 
-        Set(_sessionHpLbl,   $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
-        Set(_sessionGoldLbl, $"Session Gold:  {SoulLinkSession.Gold}",                              ColorGold);
-
         var rs = SoulLinkSession.ActiveRunSettings;
+
+        Set(_sessionHpLbl, $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
+
+        string goldLine = rs.GoldMode switch
+        {
+            GoldSharingMode.SplitByPlayer => $"Gold P0:{SoulLinkSession.GetPlayerGold(0)}  P1:{SoulLinkSession.GetPlayerGold(1)}",
+            GoldSharingMode.SharedPool    => $"Session Gold:  {SoulLinkSession.Gold}",
+            _                             => "Gold: STS2 default",
+        };
+        Set(_sessionGoldLbl, goldLine, ColorGold);
+
         Set(_settingsLbl1, $"SplitHP:{rs.SplitMaxHp}  SplitHeal:{rs.SplitHeal}", ColorPlayer);
-        Set(_settingsLbl2, $"ShareGold:{rs.ShareGold}  SplitGold:{rs.SplitGold}", ColorPlayer);
+        Set(_settingsLbl2, $"GoldMode:{rs.GoldMode}", ColorPlayer);
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
         for (int i = 0; i < MaxPlayers; i++)

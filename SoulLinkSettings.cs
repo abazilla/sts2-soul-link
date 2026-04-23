@@ -10,8 +10,8 @@ namespace SoulLinkMod;
 /// Persistent user preferences for the Soul Link mod.
 /// Loaded once at startup, saved whenever a setting changes.
 ///
-/// Run-scoped settings (SplitMaxHp, SplitHeal, ShareGold, SplitGold) are the HOST's
-/// preferences before a run starts. Once a run begins they are copied into
+/// Run-scoped settings (SplitMaxHp, SplitHeal, GoldMode) are the HOST's preferences
+/// before a run starts. Once a run begins they are copied into
 /// SoulLinkSession.ActiveRunSettings and locked for the duration.
 ///
 /// Panel visibility settings (ShowCombatLog, ShowRunStats, ShowDebugOverlay) are
@@ -35,8 +35,7 @@ public class SoulLinkSettings
 
     public bool SplitMaxHp { get; set; } = true;
     public bool SplitHeal  { get; set; } = true;
-    public bool ShareGold  { get; set; } = true;
-    public bool SplitGold  { get; set; } = false;
+    public GoldSharingMode GoldMode { get; set; } = GoldSharingMode.Default;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
@@ -51,8 +50,7 @@ public class SoulLinkSettings
     {
         SplitMaxHp = SplitMaxHp,
         SplitHeal  = SplitHeal,
-        ShareGold  = ShareGold,
-        SplitGold  = SplitGold,
+        GoldMode   = GoldMode,
     };
 
     // ── Persistence ───────────────────────────────────────────────────────────
