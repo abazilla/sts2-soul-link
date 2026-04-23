@@ -467,9 +467,10 @@ public static class SoulLinkSession
             var s = SoulLinkSettings.Instance;
             net.SendMessage(new SoulLinkSettingsSyncMessage
             {
-                SplitMaxHp = s.SplitMaxHp,
-                SplitHeal  = s.SplitHeal,
-                GoldMode   = (int)s.GoldMode,
+                SplitMaxHp   = s.SplitMaxHp,
+                SplitHeal    = s.SplitHeal,
+                GoldMode     = (int)s.GoldMode,
+                SharedLoseHp = s.SharedLoseHp,
             });
         }
         catch (Exception ex)

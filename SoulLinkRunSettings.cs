@@ -23,11 +23,18 @@ public struct SoulLinkRunSettings
     /// <summary>How gold is managed between players.</summary>
     public GoldSharingMode GoldMode;
 
+    /// <summary>
+    /// When true, "lose HP" relics and cards trigger for teammates too when a
+    /// teammate takes unblocked damage.
+    /// </summary>
+    public bool SharedLoseHp;
+
     /// <summary>Returns a SoulLinkRunSettings with the recommended defaults.</summary>
     public static SoulLinkRunSettings Default => new SoulLinkRunSettings
     {
-        SplitMaxHp = true,
-        SplitHeal  = true,
-        GoldMode   = GoldSharingMode.Default,
+        SplitMaxHp   = true,
+        SplitHeal    = true,
+        GoldMode     = GoldSharingMode.Default,
+        SharedLoseHp = false,
     };
 }

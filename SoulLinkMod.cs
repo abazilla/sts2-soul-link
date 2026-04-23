@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Godot;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Modding;
 
 namespace SoulLinkMod;
@@ -48,6 +50,19 @@ public static class SoulLinkMod
             }
 
             GD.Print("[SoulLink] Initialized.");
+
+            try
+            {
+                LocManager.Instance.GetTable("gameplay_ui")
+                    .MergeWith(new Dictionary<string, string>
+                    {
+                        ["soullink.tip.title"] = "⊞ Soul Link"
+                    });
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[SoulLink] Localization inject failed: {ex}");
+            }
         }
         catch (Exception ex)
         {

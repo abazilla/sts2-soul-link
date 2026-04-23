@@ -33,9 +33,15 @@ public class SoulLinkSettings
 
     // ── Run settings (host-owned, broadcast to clients at run start) ──────────
 
-    public bool SplitMaxHp { get; set; } = true;
-    public bool SplitHeal  { get; set; } = true;
+    public bool SplitMaxHp   { get; set; } = true;
+    public bool SplitHeal    { get; set; } = true;
     public GoldSharingMode GoldMode { get; set; } = GoldSharingMode.Default;
+    /// <summary>
+    /// When true, "lose HP" relics and cards (CentennialPuzzle, SelfFormingClay,
+    /// EmotionChip, Spite, Tear Asunder, etc.) also trigger for a player's teammates
+    /// when a teammate takes unblocked damage.
+    /// </summary>
+    public bool SharedLoseHp { get; set; } = false;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
@@ -48,9 +54,10 @@ public class SoulLinkSettings
     /// <summary>Converts run-scoped fields into a SoulLinkRunSettings struct (panel fields are local-only).</summary>
     public SoulLinkRunSettings ToRunSettings() => new SoulLinkRunSettings
     {
-        SplitMaxHp = SplitMaxHp,
-        SplitHeal  = SplitHeal,
-        GoldMode   = GoldMode,
+        SplitMaxHp   = SplitMaxHp,
+        SplitHeal    = SplitHeal,
+        GoldMode     = GoldMode,
+        SharedLoseHp = SharedLoseHp,
     };
 
     // ── Persistence ───────────────────────────────────────────────────────────

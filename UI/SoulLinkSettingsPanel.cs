@@ -34,6 +34,7 @@ public class SoulLinkSettingsPanel : Control
     private CheckBox?     _cbSplitMaxHp;
     private CheckBox?     _cbSplitHeal;
     private OptionButton? _goldModeOption;
+    private CheckBox?     _cbSharedLoseHp;
 
     // Panel visibility checkboxes
     private CheckBox? _cbShowCombatLog;
@@ -153,6 +154,10 @@ public class SoulLinkSettingsPanel : Control
         popup.AddThemeFontSizeOverride("font_size", 13);
         vbox.AddChild(_goldModeOption);
 
+        _cbSharedLoseHp = MakeCheckBox("Shared lose-HP effects");
+        _cbSharedLoseHp.Toggled += on => { SoulLinkSettings.Instance.SharedLoseHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        vbox.AddChild(_cbSharedLoseHp);
+
         vbox.AddChild(MakeSeparator());
 
         // ── Panel Settings ────────────────────────────────────────────────────
@@ -184,25 +189,28 @@ public class SoulLinkSettingsPanel : Control
         // Decide which values to display:
         // - Client during active run: show locked ActiveRunSettings from host.
         // - Everyone else: show current SoulLinkSettings.
-        bool splitMaxHp, splitHeal;
+        bool splitMaxHp, splitHeal, sharedLoseHp;
         GoldSharingMode goldMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
-            splitMaxHp = rs.SplitMaxHp;
-            splitHeal  = rs.SplitHeal;
-            goldMode   = rs.GoldMode;
+            splitMaxHp   = rs.SplitMaxHp;
+            splitHeal    = rs.SplitHeal;
+            goldMode     = rs.GoldMode;
+            sharedLoseHp = rs.SharedLoseHp;
         }
         else
         {
             var s = SoulLinkSettings.Instance;
-            splitMaxHp = s.SplitMaxHp;
-            splitHeal  = s.SplitHeal;
-            goldMode   = s.GoldMode;
+            splitMaxHp   = s.SplitMaxHp;
+            splitHeal    = s.SplitHeal;
+            goldMode     = s.GoldMode;
+            sharedLoseHp = s.SharedLoseHp;
         }
 
-        SetCheckBox(_cbSplitMaxHp, splitMaxHp, runEditable);
-        SetCheckBox(_cbSplitHeal,  splitHeal,  runEditable);
+        SetCheckBox(_cbSplitMaxHp,    splitMaxHp,   runEditable);
+        SetCheckBox(_cbSplitHeal,     splitHeal,    runEditable);
+        SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, runEditable);
 
         if (_goldModeOption != null)
         {
@@ -267,7 +275,7 @@ public class SoulLinkSettingsPanel : Control
 
     /// <summary>
     /// Rough height estimate: 1 header + 1 sep + 1 section + 2 checkboxes + 1 gold label +
-    /// 1 dropdown + 1 sep + 1 section + 3 checkboxes = 12 items × ~24px + 16px margins.
+    /// 1 dropdown + 1 shared-lose-hp checkbox + 1 sep + 1 section + 3 checkboxes = 13 items × ~24px + 16px margins.
     /// </summary>
-    private static float EstimatedHeight() => 12 * 24f + 16f;
+    private static float EstimatedHeight() => 13 * 24f + 16f;
 }

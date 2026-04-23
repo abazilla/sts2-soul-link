@@ -48,9 +48,10 @@ internal static class SettingsSyncHandler
     {
         var settings = new SoulLinkRunSettings
         {
-            SplitMaxHp = message.SplitMaxHp,
-            SplitHeal  = message.SplitHeal,
-            GoldMode   = (GoldSharingMode)message.GoldMode,
+            SplitMaxHp   = message.SplitMaxHp,
+            SplitHeal    = message.SplitHeal,
+            GoldMode     = (GoldSharingMode)message.GoldMode,
+            SharedLoseHp = message.SharedLoseHp,
         };
 
         if (SoulLinkSession.IsActive)
@@ -192,9 +193,10 @@ public static class RunLaunchPatch
             var rs = SoulLinkSession.ActiveRunSettings;
             RunManager.Instance!.NetService.SendMessage(new SoulLinkSettingsSyncMessage
             {
-                SplitMaxHp = rs.SplitMaxHp,
-                SplitHeal  = rs.SplitHeal,
-                GoldMode   = (int)rs.GoldMode,
+                SplitMaxHp   = rs.SplitMaxHp,
+                SplitHeal    = rs.SplitHeal,
+                GoldMode     = (int)rs.GoldMode,
+                SharedLoseHp = rs.SharedLoseHp,
             });
         }
 
