@@ -41,7 +41,7 @@ public class SoulLinkSettings
     /// EmotionChip, Spite, Tear Asunder, etc.) also trigger for a player's teammates
     /// when a teammate takes unblocked damage.
     /// </summary>
-    public bool SharedLoseHp { get; set; } = false;
+    public bool SharedLoseHp { get; set; } = true;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 

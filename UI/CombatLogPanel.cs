@@ -189,12 +189,7 @@ public class CombatLogPanel : Control
 
         int d = e.Delta, md = e.MaxHpDelta;
 
-        if (d < 0 && md < 0)
-        {
-            segs.Add(($"lost {-d} HP and {-md} max HP", HexDamage));
-            AppendSource(segs, "from", e.Source);
-        }
-        else if (d < 0)
+        if (d < 0)
         {
             segs.Add(($"took {-d} damage", HexDamage));
             AppendSource(segs, "from", e.Source);

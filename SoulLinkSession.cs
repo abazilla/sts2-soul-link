@@ -62,6 +62,13 @@ public static class SoulLinkSession
     // Cleared on every ApplyHpDelta call to prevent stale values across events.
     private static int _pendingMaxHpHeal;
 
+    // When MaxHp decreases below CurrentHp, ApplyMaxHpDelta clamps CurrentHp immediately.
+    // The game then fires a follow-up CurrentHp setter with the same clamp amount as a
+    // negative delta. We store the clamp here so ApplyHpDelta can recognise and skip it
+    // (CurrentHp is already correct — no logging, no double-apply).
+    // Cleared on every ApplyHpDelta call.
+    private static int _pendingHpClamp;
+
     // True once the first combat has started. Before this point we are in the
     // "initialization phase" (Neow's heal, game startup), where out-of-combat
     // heals must NOT be divided by player count — Neow only fires once, not per player.
@@ -224,6 +231,7 @@ public static class SoulLinkSession
         for (int i = 0; i < _playerGold.Length; i++)
             _playerGold[i] = 0;
         _pendingMaxHpHeal         = 0;
+        _pendingHpClamp           = 0;
         _initPhaseComplete        = false;
         PendingSource             = null;
         CurrentRoomSource         = null;
@@ -252,8 +260,16 @@ public static class SoulLinkSession
         int pendingHeal = _pendingMaxHpHeal;
         _pendingMaxHpHeal = 0;  // always consume — prevents stale values leaking across events
 
+        int pendingClamp = _pendingHpClamp;
+        _pendingHpClamp = 0;  // always consume
+
         int unclampedHeal = PendingUnclampedHeal;
         PendingUnclampedHeal = 0;  // always consume
+
+        // This is the follow-up CurrentHp write caused by MaxHp dropping below CurrentHp.
+        // ApplyMaxHpDelta already clamped CurrentHp — nothing to do here, and nothing to log.
+        if (pendingClamp > 0 && rawDelta == -pendingClamp)
+            return CurrentHp;
 
         int delta = rawDelta;
 
@@ -263,11 +279,12 @@ public static class SoulLinkSession
 
         if (delta > 0 && !inCombat)
         {
-            if (pendingHeal > 0)
+            if (pendingHeal > 0 && rawDelta == pendingHeal)
             {
-                // This heal is the follow-up to a MaxHP gain. The game already computed
-                // the delta using our redirected (scaled) MaxHp value, so the amount is
-                // already correct — don't scale it again.
+                // This heal is the follow-up to a MaxHP gain and equals the MaxHp delta
+                // exactly — the game already computed it from our scaled MaxHp value, so
+                // don't scale it again. If rawDelta > pendingHeal (e.g. Lee's Waffle
+                // heals to full, not just +maxHpDelta), fall through to normal scaling.
                 delta = pendingHeal;
             }
             else if (_initPhaseComplete && playerCount > 1 && ActiveRunSettings.SplitHeal)
@@ -302,11 +319,17 @@ public static class SoulLinkSession
                 : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
         }
 
+        int oldCurrentHp = CurrentHp;
         MaxHp = Math.Max(1, MaxHp + scaledDelta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
 
         if (scaledDelta > 0)
             _pendingMaxHpHeal = scaledDelta;
+
+        // If CurrentHp was clamped down, store the clamp amount so ApplyHpDelta can
+        // recognise and silently absorb the follow-up CurrentHp setter the game fires.
+        if (CurrentHp < oldCurrentHp)
+            _pendingHpClamp = oldCurrentHp - CurrentHp;
 
         AddEntry(new LogEntry(LogEntryType.Health, playerSlot, 0, scaledDelta, source));
     }
@@ -483,6 +506,10 @@ public static class SoulLinkSession
 
     private static void AddEntry(LogEntry entry)
     {
+        // Suppress all log entries during the run-start initialization phase (Neow choices,
+        // starting HP averaging). Only begin logging once the first combat has started.
+        if (!_initPhaseComplete) return;
+
         _log.AddFirst(entry);
         while (_log.Count > LogCapacity)
             _log.RemoveLast();
