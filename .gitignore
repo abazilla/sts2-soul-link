@@ -1,8 +1,10 @@
 bin/
 obj/
-.idea/
-deploy.sh
-read-client-log.sh
-.deploy-count
+.agents/
+issues/
+node_modules/
+.claude/
+scripts/
+
+package-lock.json
 BuildInfo.cs
-.buglogs/
