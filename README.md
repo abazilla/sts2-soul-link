@@ -1,19 +1,24 @@
 # Soul Link
 
-Soul Link is a multiplayer Slay the Spire 2 co-op mod that links all players together — sharing one HP pool and one gold pool.
+Soul Link is a multiplayer Slay the Spire 2 co-op mod where all players share HP and Gold. Inspired by the various Soul Link mods.
 
 ## Features
 
 ### NOTE! This is a super early release version of the mod, and is nowhere near finished. Nothing is balanced, nor does everything work how you expect it to.
 
-- Shared HP across all players
-- Shared gold across all players
+- Health is now a pool that's shared between all players. Changes to Current HP (healing/taking damage), and Max HP will change this shared pool, and should reflect in the UI
+- All health changes are split by # of players (eg `gaining +9 MaxHP in a 2player game -> gain +4 MaxHP to the shared pool`).
+    - Note that numbers shown in events/relics/cards/potions etc will not reflect the actual change - refer to the event log in the top right throughout the run
+- Gold is now a pool that's shared between all players. Spending and gaining gold affects the shared pool, and should reflect in the number at the top. Don't be greedy and spend all the gold before your team does :)
+- There are 3 extra panels that persist throughout the run which provide a bit more info on the state of the game
 
 More changes are coming down the pipeline!
 
+There's a bunch of changes and bugs that I'm aware of, but please let me know about bugs you encounter, or just any opinions on balance/gameplay and such. Keen to hear everyone's thoughts.
+
 ## Installing
 
-Copy zip's `SoulLink.dll` and `SoulLink.json` into your STS2 `mods/SoulLink/` folder.
+Copy the zip's `SoulLink.dll` and `SoulLink.json` into your STS2 `mods/SoulLink/` folder.
 
 ## Building
 
