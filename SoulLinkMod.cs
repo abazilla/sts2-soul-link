@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Localization;
@@ -13,6 +15,7 @@ namespace SoulLinkMod;
 public static class SoulLinkMod
 {
     public const string Id = "soullink";
+    public static string Version { get; private set; } = "unknown";
 
     /// <summary>
     /// Set to true while SoulLinkSession.ApplyToAllPlayers() is writing canonical
@@ -22,6 +25,15 @@ public static class SoulLinkMod
 
     public static void Initialize()
     {
+        try
+        {
+            var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
+            var json = File.ReadAllText(Path.Combine(dir, "SoulLink.json"));
+            var m = Regex.Match(json, "\"version\"\\s*:\\s*\"([^\"]+)\"");
+            if (m.Success) Version = m.Groups[1].Value;
+        }
+        catch { /* Version stays "unknown" */ }
+
         try
         {
             var harmony = new Harmony(Id);

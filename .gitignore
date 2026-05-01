@@ -6,5 +6,5 @@ node_modules/
 .claude/
 scripts/
 
+.mcp.json
 package-lock.json
-BuildInfo.cs

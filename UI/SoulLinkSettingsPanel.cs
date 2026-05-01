@@ -120,7 +120,7 @@ public class SoulLinkSettingsPanel : Control
         margin.AddChild(vbox);
 
         // Header
-        var header = MakeLabel("⊞  SOUL LINK SETTINGS", ColHeader, 15);
+        var header = MakeLabel($"SOUL LINK  v{SoulLinkMod.Version}", ColHeader, 15);
         vbox.AddChild(header);
         vbox.AddChild(MakeSeparator());
 

@@ -86,7 +86,7 @@ public class DebugOverlay : Control
         AddChild(vbox);
 
         // Header button — borderless, looks like a plain clickable label.
-        _toggleButton = new Button { Text = $"Soul Link Debug ({BuildInfo.Version}) v" };
+        _toggleButton = new Button { Text = $"Soul Link Debug ({SoulLinkMod.Version}) v" };
         _toggleButton.Pressed += OnToggle;
         ApplyHeaderButtonStyle(_toggleButton);
         SoulLinkFont.Apply(_toggleButton);
@@ -189,7 +189,7 @@ public class DebugOverlay : Control
             _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
-            _toggleButton.Text = $"Soul Link Debug ({BuildInfo.Version}) {(_expanded ? "v" : ">")}";
+            _toggleButton.Text = $"Soul Link Debug ({SoulLinkMod.Version}) {(_expanded ? "v" : ">")}";
     }
 
     private static void Set(Label? lbl, string text, Color color)
