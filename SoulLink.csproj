@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="Local.props" Condition="Exists('Local.props')" />
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
     <LangVersion>12.0</LangVersion>
     <AssemblyName>SoulLink</AssemblyName>
-    <STS2GameDir Condition="'$(STS2GameDir)' == ''">/mnt/w/SteamLibrary/steamapps/common/Slay the Spire 2</STS2GameDir>
     <ModsPath Condition="'$(ModsPath)' == ''">$(STS2GameDir)\mods</ModsPath>
   </PropertyGroup>
 
