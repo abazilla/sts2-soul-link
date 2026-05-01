@@ -18,13 +18,14 @@ namespace SoulLinkMod.Patches;
 ///
 /// SharedPool — one canonical pool.  Local player: compute delta, update pool, mirror
 ///   canonical to all other player objects on this machine, broadcast.
-///   Remote player: redirect stale STS2-sync write back to canonical so the backing
-///   field is never clobbered.
+///   Remote player: setter blocked entirely (return false). Gold is only written via
+///   GoldSyncHandler under ApplyingCanonical=true, preventing async double-apply bugs
+///   (e.g. CursedPearl firing on both machines).
 ///
 /// SplitByPlayer — each player has their own pool.  Local player gains are divided
 ///   by playerCount; spends are full.  Mirror keeps other player objects showing their
 ///   own _playerGold[] values.  Broadcast carries this player's new canonical.
-///   Remote player: redirect to that player's _playerGold[] value.
+///   Remote player: setter blocked entirely (same reasoning as SharedPool).
 ///
 /// Note: ShouldBroadcast=false on SoulLinkGoldSyncMessage so the host does NOT
 /// process its own message (preventing double-logging with scaled deltas).
@@ -35,15 +36,19 @@ public static class GoldSyncPatch
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Player), nameof(Player.Gold));
 
-    static void Prefix(Player __instance, ref int value)
+    // Returns false to skip the original setter for remote players (blocking all
+    // game-initiated writes). Returns true to let the setter run normally for local
+    // players and for canonical writes (ApplyingCanonical=true).
+    static bool Prefix(Player __instance, ref int value)
     {
-        if (SoulLinkMod.ApplyingCanonical) return;
-        if (!SoulLinkSession.IsActive) return;
+        // Canonical writes (from GoldSyncHandler / mirror logic) always go through.
+        if (SoulLinkMod.ApplyingCanonical) return true;
+        if (!SoulLinkSession.IsActive) return true;
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
-        if (runState == null) return;
+        if (runState == null) return true;
 
-        // Find this player's slot. Skip entirely if they're not in the current run.
+        // Find this player's slot. If not in the current run, let STS2 handle it.
         int playerSlot = -1;
         for (int i = 0; i < runState.Players.Count; i++)
         {
@@ -53,28 +58,25 @@ public static class GoldSyncPatch
                 break;
             }
         }
-        if (playerSlot < 0) return;
+        if (playerSlot < 0) return true;
 
         var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
         // ── Default mode ────────────────────────────────────────────────────────
         // STS2 native gold — Soul Link doesn't intercept anything.
-        if (goldMode == GoldSharingMode.Default) return;
+        if (goldMode == GoldSharingMode.Default) return true;
 
         // ── Remote player ───────────────────────────────────────────────────────
-        // STS2's periodic sync may carry a stale value. Redirect to canonical
-        // so the backing field is never clobbered.
+        // Block ALL game-initiated gold writes for remote players. The only
+        // authoritative source for remote gold is GoldSyncHandler (ApplyingCanonical=true).
+        // This prevents events like CursedPearl from double-applying gold on the peer
+        // that doesn't own the player, regardless of async timing.
         if (!LocalContext.IsMe(__instance))
-        {
-            value = goldMode == GoldSharingMode.SplitByPlayer
-                ? SoulLinkSession.GetPlayerGold(playerSlot)
-                : SoulLinkSession.Gold;
-            return;
-        }
+            return false;
 
         // ── Local player ────────────────────────────────────────────────────────
         int delta = value - __instance.Gold;
-        if (delta == 0) return;
+        if (delta == 0) return true;
 
         int playerCount = runState.Players.Count;
 
@@ -129,5 +131,6 @@ public static class GoldSyncPatch
         CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
+        return true;
     }
 }
