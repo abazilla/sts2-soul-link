@@ -6,6 +6,7 @@ node_modules/
 .claude/
 scripts/
 
+Local.props
 .mcp.json
 package-lock.json
 Local.props

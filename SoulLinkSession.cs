@@ -486,7 +486,7 @@ public static class SoulLinkSession
         try
         {
             var net = RunManager.Instance?.NetService;
-            if (net == null) return;
+            if (net == null || !net.IsConnected) return;
             var s = SoulLinkSettings.Instance;
             net.SendMessage(new SoulLinkSettingsSyncMessage
             {

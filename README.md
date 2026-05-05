@@ -27,7 +27,9 @@ Requirements:
 - Slay the Spire 2
 - .NET 9.0 SDK
 
-Create a `Local.props` file in the project root with your STS2 path:
+## Building
+
+Save the below code to a file named `Local.props` to set your STS2 path for building:
 
 ```xml
 <Project>

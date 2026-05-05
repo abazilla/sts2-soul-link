@@ -147,7 +147,8 @@ public static class CustomRunClosedPatch
     static void Postfix()
     {
         SoulLinkSettingsPanel.Clear();
-        SettingsSyncHandler.TryUnregister();
+        // Do NOT unregister SettingsSyncHandler here — the lobby close fires after run start,
+        // which would remove the handler mid-run. RunCleanUpPatch handles unregistration.
     }
 }
 
