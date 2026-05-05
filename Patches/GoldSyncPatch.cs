@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -36,6 +37,23 @@ namespace SoulLinkMod.Patches;
 [HarmonyPatch(typeof(Player))]
 public static class GoldSyncPatch
 {
+    // Tracks (playerSlot, delta) pairs for gold changes applied deterministically
+    // from a remote player's setter in SharedPool mode.  When the peer's broadcast
+    // arrives in GoldSyncHandler, the matching entry is consumed and the message
+    // is skipped — preventing a double-apply of the same enemy-initiated change.
+    private static readonly Queue<(int slot, int delta)> _pendingCancellations = new();
+
+    internal static bool TryConsumeCancellation(int slot, int delta)
+    {
+        if (_pendingCancellations.Count == 0) return false;
+        var (s, d) = _pendingCancellations.Peek();
+        if (s != slot || d != delta) return false;
+        _pendingCancellations.Dequeue();
+        return true;
+    }
+
+    internal static void ClearCancellations() => _pendingCancellations.Clear();
+
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Player), nameof(Player.Gold));
 
@@ -68,22 +86,66 @@ public static class GoldSyncPatch
         // STS2 native gold — Soul Link doesn't intercept anything.
         if (goldMode == GoldSharingMode.Default) return true;
 
+        int playerCount = runState.Players.Count;
+
         // ── Remote player ───────────────────────────────────────────────────────
-        // Block ALL game-initiated gold writes for remote players. Gold is only
-        // written via GoldSyncHandler under ApplyingCanonical=true.
-        // In SharedPool this prevents a race condition: GoldSyncHandler uses
-        // delta-based accumulation so both machines correctly converge even when
-        // each only sees their own player's local event.
-        // In SplitByPlayer this prevents double-applying the scaled delta that
-        // GoldSyncHandler distributes to all other player slots.
         if (!LocalContext.IsMe(__instance))
+        {
+            // SharedPool: enemy-initiated gold changes (e.g. Gremlin Merc steal) are
+            // deterministic — STS2 fires the setter on BOTH machines for the same player.
+            // Apply the delta locally in-band so the canonical pool is correct before the
+            // checksum runs, without waiting for a network round-trip.  We enqueue the
+            // (slot, delta) so GoldSyncHandler can cancel the redundant broadcast when
+            // it arrives (preventing a double-apply).
+            //
+            // SplitByPlayer: keep blocking; the peer broadcasts the canonical value
+            // and GoldSyncHandler distributes the scaled delta.
+            if (goldMode == GoldSharingMode.SharedPool)
+            {
+                int remDelta = value - __instance.Gold;
+                if (remDelta == 0) return false;
+
+                bool remBlocked = remDelta > 0 && __instance.Relics.Any(r =>
+                    r.Id?.Entry == "Ectoplasm");
+
+                string? remSource = SoulLinkSession.PendingSource
+                    ?? SoulLinkSession.CurrentRoomSource;
+                SoulLinkSession.PendingSource = null;
+
+                int remCanonical = SoulLinkSession.ApplyGoldDelta(remDelta, playerCount, playerSlot, remBlocked,
+                    blockSource: remBlocked ? "Ectoplasm" : null,
+                    source: remBlocked ? null : remSource);
+                value = remCanonical;
+
+                SoulLinkMod.ApplyingCanonical = true;
+                try
+                {
+                    for (int i = 0; i < runState.Players.Count; i++)
+                    {
+                        if (runState.Players[i] == __instance) continue;
+                        runState.Players[i].Gold = remCanonical;
+                    }
+                }
+                finally
+                {
+                    SoulLinkMod.ApplyingCanonical = false;
+                }
+
+                // Enqueue for cancellation so GoldSyncHandler ignores the peer's broadcast.
+                if (!remBlocked)
+                    _pendingCancellations.Enqueue((playerSlot, remDelta));
+
+                CombatLogPanel.Current?.Refresh();
+                RunStatsPanel.Current?.Refresh();
+                DebugOverlay.Current?.Refresh();
+                return true;
+            }
             return false;
+        }
 
         // ── Local player ────────────────────────────────────────────────────────
         int delta = value - __instance.Gold;
         if (delta == 0) return true;
-
-        int playerCount = runState.Players.Count;
 
         // Check for Ectoplasm or STS2 equivalent gold-blocking relic.
         bool blocked = delta > 0 && __instance.Relics.Any(r =>

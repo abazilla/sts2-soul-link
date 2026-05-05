@@ -115,6 +115,14 @@ internal static class GoldSyncHandler
 
         var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
+        // In SharedPool mode the remote player's setter may have already applied this
+        // delta deterministically (e.g. monster gold-steal fires on both machines).
+        // Consume the cancellation entry and skip to avoid a double-apply.
+        if (goldMode == GoldSharingMode.SharedPool
+            && message.Delta != 0
+            && GoldSyncPatch.TryConsumeCancellation(message.PlayerSlot, message.Delta))
+            return;
+
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
@@ -249,6 +257,7 @@ public static class RunCleanUpPatch
 
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
         SettingsSyncHandler.TryUnregister();
+        GoldSyncPatch.ClearCancellations();
 
         SoulLinkSession.OnRunEnd();
     }
