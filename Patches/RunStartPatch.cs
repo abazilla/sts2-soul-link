@@ -18,18 +18,25 @@ namespace SoulLinkMod.Patches;
 internal static class SettingsSyncHandler
 {
     private static bool _registered;
+    // Track which NetService instance we registered on. The lobby and run-time game
+    // service are different objects — if the instance changes we must re-register on
+    // the new one even if _registered is already true.
+    private static object? _registeredNet;
 
     /// <summary>
-    /// Registers the handler if not already registered. Safe to call multiple times
-    /// (lobby init, run start). No-op if NetService is unavailable.
+    /// Registers the handler on the current NetService. Safe to call multiple times
+    /// (lobby init, run start). Re-registers automatically when the NetService instance
+    /// changes (e.g. lobby service → run-time game service transition).
     /// </summary>
     internal static void TryRegister()
     {
-        if (_registered) return;
         var net = RunManager.Instance?.NetService;
         if (net == null) return;
+        // Already registered on this exact instance — nothing to do.
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
         net.RegisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
         _registered = true;
+        _registeredNet = net;
         GD.Print("[SoulLink] SettingsSyncHandler registered.");
     }
 
@@ -39,6 +46,7 @@ internal static class SettingsSyncHandler
         if (!_registered) return;
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
         _registered = false;
+        _registeredNet = null;
     }
 
     /// <summary>
@@ -84,16 +92,26 @@ internal static class SettingsSyncHandler
 internal static class GoldSyncHandler
 {
     /// <summary>
-    /// Receives a canonical gold broadcast from the other peer and applies it locally.
+    /// Receives a gold broadcast from the other peer and applies it locally.
     /// Registered as a message handler when the run starts, unregistered when it ends.
+    ///
+    /// SharedPool uses delta-based accumulation rather than absolute overwrite.
+    /// Both players earn their own combat rewards independently (each machine only
+    /// applies its own local player's event). If the handler used absolute values,
+    /// the last broadcast received would overwrite the other — creating a race
+    /// condition where the final canonical reflects only one player's reward.
+    /// With deltas, each machine accumulates both contributions regardless of order:
+    ///   HOST:   +19 (local) → receives +16 delta → G+35 ✓
+    ///   CLIENT: +16 (local) → receives +19 delta → G+35 ✓
+    ///
+    /// Delta=0 is the initial run-start sync — treated as an absolute reset to
+    /// fix any divergence from Neow bonuses that fired before IsActive was set.
     /// </summary>
     internal static void Handle(SoulLinkGoldSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null) return;
-
-        SoulLinkSession.SetGoldDirect(message.CanonicalGold, message.PlayerSlot);
 
         var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
@@ -102,6 +120,8 @@ internal static class GoldSyncHandler
         {
             if (goldMode == GoldSharingMode.SplitByPlayer)
             {
+                SoulLinkSession.SetGoldDirect(message.CanonicalGold, message.PlayerSlot);
+
                 // Update the sender's player object with their canonical.
                 if (message.PlayerSlot < runState.Players.Count)
                     runState.Players[message.PlayerSlot].Gold = message.CanonicalGold;
@@ -121,9 +141,15 @@ internal static class GoldSyncHandler
             }
             else
             {
-                // SharedPool: all players show the same canonical total.
+                // SharedPool: delta-based accumulation to avoid the race condition where
+                // concurrent independent reward events on both machines overwrite each other.
+                // Delta=0 is the initial run-start sync — use absolute canonical as a reset.
+                int newCanonical = message.Delta == 0
+                    ? message.CanonicalGold
+                    : Math.Max(0, SoulLinkSession.Gold + message.Delta);
+                SoulLinkSession.SetGoldDirect(newCanonical);
                 foreach (var player in runState.Players)
-                    player.Gold = message.CanonicalGold;
+                    player.Gold = newCanonical;
             }
         }
         finally

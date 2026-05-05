@@ -19,13 +19,16 @@ namespace SoulLinkMod.Patches;
 /// SharedPool — one canonical pool.  Local player: compute delta, update pool, mirror
 ///   canonical to all other player objects on this machine, broadcast.
 ///   Remote player: setter blocked entirely (return false). Gold is only written via
-///   GoldSyncHandler under ApplyingCanonical=true, preventing async double-apply bugs
-///   (e.g. CursedPearl firing on both machines).
+///   GoldSyncHandler under ApplyingCanonical=true. GoldSyncHandler uses delta-based
+///   accumulation (not absolute overwrite) so concurrent independent gold events on
+///   both machines converge correctly without a race condition.
 ///
 /// SplitByPlayer — each player has their own pool.  Local player gains are divided
 ///   by playerCount; spends are full.  Mirror keeps other player objects showing their
 ///   own _playerGold[] values.  Broadcast carries this player's new canonical.
-///   Remote player: setter blocked entirely (same reasoning as SharedPool).
+///   Remote player: setter blocked entirely. GoldSyncHandler on the receiver applies
+///   the scaled delta to all other slots; allowing the remote setter through would
+///   double-apply that delta.
 ///
 /// Note: ShouldBroadcast=false on SoulLinkGoldSyncMessage so the host does NOT
 /// process its own message (preventing double-logging with scaled deltas).
@@ -36,9 +39,8 @@ public static class GoldSyncPatch
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Player), nameof(Player.Gold));
 
-    // Returns false to skip the original setter for remote players (blocking all
-    // game-initiated writes). Returns true to let the setter run normally for local
-    // players and for canonical writes (ApplyingCanonical=true).
+    // Returns false to block the setter for all remote players in non-Default modes.
+    // Returns true to let the setter run for local players and canonical writes.
     static bool Prefix(Player __instance, ref int value)
     {
         // Canonical writes (from GoldSyncHandler / mirror logic) always go through.
@@ -67,10 +69,13 @@ public static class GoldSyncPatch
         if (goldMode == GoldSharingMode.Default) return true;
 
         // ── Remote player ───────────────────────────────────────────────────────
-        // Block ALL game-initiated gold writes for remote players. The only
-        // authoritative source for remote gold is GoldSyncHandler (ApplyingCanonical=true).
-        // This prevents events like CursedPearl from double-applying gold on the peer
-        // that doesn't own the player, regardless of async timing.
+        // Block ALL game-initiated gold writes for remote players. Gold is only
+        // written via GoldSyncHandler under ApplyingCanonical=true.
+        // In SharedPool this prevents a race condition: GoldSyncHandler uses
+        // delta-based accumulation so both machines correctly converge even when
+        // each only sees their own player's local event.
+        // In SplitByPlayer this prevents double-applying the scaled delta that
+        // GoldSyncHandler distributes to all other player slots.
         if (!LocalContext.IsMe(__instance))
             return false;
 
