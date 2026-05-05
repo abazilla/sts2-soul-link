@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
@@ -61,8 +63,16 @@ public static class CentennialPuzzleSoulLinkPatch
         if (alreadyUsed) return;
 
         // Mirror the original effect: flash, mark used, draw 3 cards for the relic's owner.
+        // IMPORTANT: we must create a choice context owned by the *relic holder*, not the damage
+        // target.  CardPileCmd.Draw routes the draw action through the context owner's action
+        // queue; using the target's context here would enqueue the draw under the wrong player,
+        // causing a host/client state divergence (SL-004).
+        var ownerContext = new HookPlayerChoiceContext(
+            __instance.Owner,
+            LocalContext.NetId.Value,
+            GameActionType.Combat);
         __instance.Flash();
         _usedThisCombatField.SetValue(__instance, true);
-        await CardPileCmd.Draw(choiceContext, __instance.DynamicVars.Cards.BaseValue, __instance.Owner);
+        await CardPileCmd.Draw(ownerContext, __instance.DynamicVars.Cards.BaseValue, __instance.Owner);
     }
 }

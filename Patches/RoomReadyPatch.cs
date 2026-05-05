@@ -121,9 +121,10 @@ internal static class RoomPanelInjector
             var rs = SoulLinkSession.ActiveRunSettings;
             RunManager.Instance!.NetService.SendMessage(new SoulLinkSettingsSyncMessage
             {
-                SplitMaxHp = rs.SplitMaxHp,
-                SplitHeal  = rs.SplitHeal,
-                GoldMode   = (int)rs.GoldMode,
+                SplitMaxHp   = rs.SplitMaxHp,
+                SplitHeal    = rs.SplitHeal,
+                GoldMode     = (int)rs.GoldMode,
+                SharedLoseHp = rs.SharedLoseHp,
             });
             GD.Print("[SoulLink] Re-sent settings sync from host at room entry.");
         }
