@@ -62,7 +62,6 @@ public static class DemonTongueSoulLinkPatch
 
         _triggeredThisTurnField.SetValue(__instance, true);
         __instance.Flash();
-        // Heal the relic's owner (not the teammate) — HealInternalPatch propagates it.
         await CreatureCmd.Heal(ownerCreature, result.UnblockedDamage);
     }
 }
