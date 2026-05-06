@@ -13,5 +13,11 @@ Local.props
 
 # Beads / Dolt files (added by bd init)
 .dolt/
-*.db
+.beads/
 .beads-credential-key
+.sandcastle/
+*.db
+
+# AI agent config files
+AGENTS.md
+CLAUDE.md
