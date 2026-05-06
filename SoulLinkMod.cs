@@ -34,6 +34,9 @@ public static class SoulLinkMod
         }
         catch { /* Version stays "unknown" */ }
 
+        // Initialize feature flag system
+        FeatureFlagManager.Initialize();
+
         try
         {
             var harmony = new Harmony(Id);
