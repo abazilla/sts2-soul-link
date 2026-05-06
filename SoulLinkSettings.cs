@@ -66,6 +66,7 @@ public class SoulLinkSettings
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        IncludeFields = true, // SoulLinkRunSettings uses public fields, not properties
     };
 
     private static string SettingsPath =>

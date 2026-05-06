@@ -477,6 +477,24 @@ public static class SoulLinkSession
     }
 
     /// <summary>
+    /// Re-seeds the shared gold pool from the local player data. Called when GoldMode
+    /// switches to SharedPool after OnRunStart already ran with a different mode — in that
+    /// case <see cref="Gold"/> was never initialized (it's 0). Reading from player objects
+    /// gives the correct saved value because Default/SplitByPlayer modes don't overwrite
+    /// player gold in ApplyToAllPlayers.
+    /// </summary>
+    internal static void ReinitSharedGold(RunState runState)
+    {
+        if (runState.Players.Count == 0) return;
+        Gold = runState.Players[0].Gold;
+        // Mirror canonical to every player so they're consistent.
+        SoulLinkMod.ApplyingCanonical = true;
+        try { foreach (var p in runState.Players) p.Gold = Gold; }
+        finally { SoulLinkMod.ApplyingCanonical = false; }
+        GD.Print($"[SoulLink] ReinitSharedGold: Gold={Gold}");
+    }
+
+    /// <summary>
     /// Attempts to broadcast current SoulLinkSettings to connected peers.
     /// Useful in the lobby so the client's read-only panel stays in sync with the host.
     /// No-op if NetService is unavailable.

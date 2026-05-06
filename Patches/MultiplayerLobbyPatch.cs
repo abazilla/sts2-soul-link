@@ -152,6 +152,35 @@ public static class CustomRunClosedPatch
     }
 }
 
+// ── NCustomRunLoadScreen (load-saved-run flow) ────────────────────────────────
+//
+// When a host loads a saved multiplayer run the client skips the character-select
+// lobby and goes straight to a load screen (NCustomRunLoadScreen). Because the
+// lobby patches never fire, SettingsSyncHandler is never registered early, and the
+// host's SoulLinkSettingsSyncMessage (sent from RunLaunchPatch right after the host
+// launches the run) arrives while the client is still on this screen — before the
+// client's own RunLaunchPatch runs. The message is dropped, PendingSyncedRunSettings
+// stays null, and the run starts with whichever GoldMode was in the client's local
+// soullink_run.json rather than the host's authoritative settings.
+//
+// Registering SettingsSyncHandler in _Ready ensures the sync message lands in
+// PendingSyncedRunSettings so OnRunStart() picks up the correct GoldMode.
+
+[HarmonyPatch]
+public static class CustomRunLoadScreenReadyPatch
+{
+    static MethodBase? TargetMethod() =>
+        AccessTools.Method(
+            AccessTools.TypeByName("MegaCrit.Sts2.Core.Nodes.Screens.CustomRun.NCustomRunLoadScreen"),
+            "_Ready");
+
+    [HarmonyPostfix]
+    static void Postfix()
+    {
+        SettingsSyncHandler.TryRegister();
+    }
+}
+
 // ── NMultiplayerHostSubmenu ────────────────────────────────────────────────────
 
 [HarmonyPatch]

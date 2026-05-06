@@ -65,14 +65,25 @@ internal static class SettingsSyncHandler
         if (SoulLinkSession.IsActive)
         {
             // Normal path: run is already active on this peer, apply immediately.
+            var prevGoldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
             SoulLinkSession.ActiveRunSettings = settings;
 
-            // Re-sync _playerGold from actual player values when switching to SplitByPlayer.
-            // Handles the timing issue where OnRunStart ran with a different GoldMode.
+            var runState = RunManager.Instance?.DebugOnlyGetState();
+
+            // Re-sync gold from actual player values when the GoldMode changes.
+            // This handles the timing issue where OnRunStart ran with a different GoldMode
+            // (e.g. the initial SoulLinkSettingsSyncMessage was dropped during the load
+            // screen and arrived late, after IsActive was set).
             if (settings.GoldMode == GoldSharingMode.SplitByPlayer)
             {
-                var runState = RunManager.Instance?.DebugOnlyGetState();
                 if (runState != null) SoulLinkSession.ReinitPlayerGold(runState);
+            }
+            else if (settings.GoldMode == GoldSharingMode.SharedPool
+                     && prevGoldMode != GoldSharingMode.SharedPool)
+            {
+                // Switched into SharedPool: Gold was 0 (Default/SplitByPlayer don't use it).
+                // Re-seed from the local player's actual gold so the pool starts correctly.
+                if (runState != null) SoulLinkSession.ReinitSharedGold(runState);
             }
         }
         else
@@ -118,10 +129,20 @@ internal static class GoldSyncHandler
         // In SharedPool mode the remote player's setter may have already applied this
         // delta deterministically (e.g. monster gold-steal fires on both machines).
         // Consume the cancellation entry and skip to avoid a double-apply.
+        // (Handles: remote setter fired BEFORE this handler.)
         if (goldMode == GoldSharingMode.SharedPool
             && message.Delta != 0
             && GoldSyncPatch.TryConsumeCancellation(message.PlayerSlot, message.Delta))
             return;
+
+        // Register this delta as network-applied so the remote setter can skip it if
+        // OptionIndexChosenMessage (or any event replay) fires the setter AFTER we apply.
+        // (Handles: this handler fires BEFORE the remote setter.)
+        if (goldMode == GoldSharingMode.SharedPool && message.Delta != 0)
+        {
+            GoldSyncPatch.EnqueueNetworkApplied(message.PlayerSlot);
+            GD.Print($"[SoulLink][GoldSync] EnqueueNetworkApplied slot={message.PlayerSlot} delta={message.Delta}");
+        }
 
         SoulLinkMod.ApplyingCanonical = true;
         try

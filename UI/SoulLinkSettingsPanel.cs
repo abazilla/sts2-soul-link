@@ -105,6 +105,11 @@ public class SoulLinkSettingsPanel : Control
 
     public static void Clear() => Current = null;
 
+    public override void _ExitTree()
+    {
+        if (Current == this) Current = null;
+    }
+
     // ── UI Construction ───────────────────────────────────────────────────────
 
     private void BuildUi()

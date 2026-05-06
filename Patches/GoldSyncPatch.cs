@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Godot;
 using HarmonyLib;
 using SoulLinkMod.UI;
 using MegaCrit.Sts2.Core.Context;
@@ -19,10 +20,10 @@ namespace SoulLinkMod.Patches;
 ///
 /// SharedPool — one canonical pool.  Local player: compute delta, update pool, mirror
 ///   canonical to all other player objects on this machine, broadcast.
-///   Remote player: setter blocked entirely (return false). Gold is only written via
-///   GoldSyncHandler under ApplyingCanonical=true. GoldSyncHandler uses delta-based
-///   accumulation (not absolute overwrite) so concurrent independent gold events on
-///   both machines converge correctly without a race condition.
+///   Remote player: in-band delta apply for deterministic changes (enemy steal, event
+///   replay) with two-direction dedup to prevent double-apply regardless of ordering:
+///     _pendingCancellations — setter fires first → GoldSyncHandler consumes on arrival.
+///     _networkApplied       — GoldSyncHandler fires first → setter consumes when fired.
 ///
 /// SplitByPlayer — each player has their own pool.  Local player gains are divided
 ///   by playerCount; spends are full.  Mirror keeps other player objects showing their
@@ -41,6 +42,7 @@ public static class GoldSyncPatch
     // from a remote player's setter in SharedPool mode.  When the peer's broadcast
     // arrives in GoldSyncHandler, the matching entry is consumed and the message
     // is skipped — preventing a double-apply of the same enemy-initiated change.
+    // (Handles: remote setter fires BEFORE GoldSyncHandler receives the broadcast.)
     private static readonly Queue<(int slot, int delta)> _pendingCancellations = new();
 
     internal static bool TryConsumeCancellation(int slot, int delta)
@@ -52,7 +54,38 @@ public static class GoldSyncPatch
         return true;
     }
 
-    internal static void ClearCancellations() => _pendingCancellations.Clear();
+    // Tracks playerSlot values for gold changes already applied by GoldSyncHandler
+    // from a network broadcast.  When the remote player's setter fires afterward (because
+    // the game executes OptionIndexChosenMessage after the network message arrived), the
+    // matching slot is consumed and the setter is redirected to the already-applied
+    // canonical — preventing a double-apply.
+    // (Handles: GoldSyncHandler fires BEFORE the remote setter fires.)
+    //
+    // We match on slot only (not delta) because GoldSyncHandler updates player.Gold to the
+    // new canonical before the setter fires.  When the game's GoldLostMessage then fires the
+    // setter, it sees the already-updated curGold and computes a different remDelta (e.g. the
+    // gold is lower than the original purchase cost after clamping), so an exact delta match
+    // would fail and cause a double-apply.  Slot-only matching is safe because merchant
+    // purchases (the source of these entries) never overlap with in-band deterministic
+    // gold changes like enemy steals (which happen in combat, a different game state).
+    private static readonly Queue<int> _networkApplied = new();
+
+    internal static bool TryConsumeNetworkApplied(int slot)
+    {
+        if (_networkApplied.Count == 0) return false;
+        if (_networkApplied.Peek() != slot) return false;
+        _networkApplied.Dequeue();
+        return true;
+    }
+
+    internal static void EnqueueNetworkApplied(int slot) =>
+        _networkApplied.Enqueue(slot);
+
+    internal static void ClearCancellations()
+    {
+        _pendingCancellations.Clear();
+        _networkApplied.Clear();
+    }
 
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Player), nameof(Player.Gold));
@@ -103,7 +136,37 @@ public static class GoldSyncPatch
             if (goldMode == GoldSharingMode.SharedPool)
             {
                 int remDelta = value - __instance.Gold;
+                GD.Print($"[SoulLink][GoldSync] Remote setter slot={playerSlot} curGold={__instance.Gold} newValue={value} remDelta={remDelta} canonicalGold={SoulLinkSession.Gold} networkAppliedCount={_networkApplied.Count}");
                 if (remDelta == 0) return false;
+
+                // GoldSyncHandler already applied this purchase from the network broadcast
+                // before the game's GoldLostMessage fired the setter.  The canonical is
+                // already correct — redirect to it so the game's setter writes the right
+                // value without double-applying the delta.
+                bool consumed = TryConsumeNetworkApplied(playerSlot);
+                GD.Print($"[SoulLink][GoldSync] TryConsumeNetworkApplied({playerSlot})={consumed}");
+                if (consumed)
+                {
+                    // Redirect the setter value to the already-applied canonical so all
+                    // player objects stay in sync. (GoldSyncHandler updated the session and
+                    // mirrored to other players; letting this setter run with the canonical
+                    // value updates this player object to match.)
+                    value = SoulLinkSession.Gold;
+                    SoulLinkMod.ApplyingCanonical = true;
+                    try
+                    {
+                        for (int i = 0; i < runState.Players.Count; i++)
+                        {
+                            if (runState.Players[i] == __instance) continue;
+                            runState.Players[i].Gold = value;
+                        }
+                    }
+                    finally
+                    {
+                        SoulLinkMod.ApplyingCanonical = false;
+                    }
+                    return true;
+                }
 
                 bool remBlocked = remDelta > 0 && __instance.Relics.Any(r =>
                     r.Id?.Entry == "Ectoplasm");
