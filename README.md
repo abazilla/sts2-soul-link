@@ -1,6 +1,7 @@
 # Soul Link
-
 Soul Link is a multiplayer Slay the Spire 2 co-op mod where all players share HP and Gold. Inspired by the various Soul Link mods.
+
+https://github.com/user-attachments/assets/2958dcbe-a784-4a89-a63a-d1345021a4d7
 
 ## Features
 
@@ -11,6 +12,10 @@ Soul Link is a multiplayer Slay the Spire 2 co-op mod where all players share HP
     - Note that numbers shown in events/relics/cards/potions etc will not reflect the actual change - refer to the event log in the top right throughout the run
 - Gold is now a pool that's shared between all players. Spending and gaining gold affects the shared pool, and should reflect in the number at the top. Don't be greedy and spend all the gold before your team does :)
 - There are 3 extra panels that persist throughout the run which provide a bit more info on the state of the game
+
+https://github.com/user-attachments/assets/272fa213-e270-4dd5-a026-d83b97959286
+
+https://github.com/user-attachments/assets/f979f3dd-20fa-4303-8427-7a858d756cf1
 
 More changes are coming down the pipeline!
 
