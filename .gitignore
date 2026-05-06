@@ -10,3 +10,8 @@ Local.props
 .mcp.json
 package-lock.json
 Local.props
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
