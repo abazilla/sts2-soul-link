@@ -1,6 +1,6 @@
-# INetAction System and Feature Flags (Phase 1)
+# INetAction System and Feature Flags
 
-This document describes the INetAction contract system and feature flag infrastructure added in Phase 1.
+This document describes the INetAction contract system and feature flag infrastructure.
 
 ## Overview
 
@@ -19,25 +19,28 @@ The feature flag system (`FeatureFlagManager`) allows runtime enabling/disabling
 - **Run**: Active for the current run only
 - **Session**: Active for the current play session only
 
-## Phase 1 Implementation
+## Implementation Status
 
-Phase 1 provides the foundational contracts and infrastructure:
-
-### Files Added
+### Files
 
 1. **INetAction.cs** - Core action contract and context interface
 2. **NetActionContext.cs** - Default implementation of action execution context
-3. **FeatureFlags.cs** - Enum of available feature flags and scopes
-4. **FeatureFlagManager.cs** - Manager for checking and setting flags
-5. **Examples/GoldChangeAction.cs** - Reference implementation showing action pattern
+3. **NetActionService.cs** - Service for sending/receiving actions
+4. **NetActionMessage.cs** - Generic wrapper for transporting actions
+5. **FeatureFlags.cs** - Enum of available feature flags and scopes
+6. **FeatureFlagManager.cs** - Manager for checking and setting flags
+7. **Actions/GoldChangeAction.cs** - Gold sync via INetAction
+8. **Actions/HpChangeAction.cs** - HP sync via INetAction
+9. **Actions/MaxHpChangeAction.cs** - MaxHP sync via INetAction
 
 ### Current State
 
 - ✅ INetAction contract defined
-- ✅ Feature flag system scaffold complete
-- ✅ Integration with SoulLinkMod.Initialize()
+- ✅ Feature flag system complete
+- ✅ NetActionService send/receive infrastructure
+- ✅ HP/MaxHP sync via INetAction
+- ✅ Gold sync via INetAction (when NetworkedActions enabled)
 - ⚠️ NetworkedActions flag defaults to `false` (legacy sync still active)
-- ⚠️ Example implementations are scaffolds (no integration yet)
 
 ## Using INetAction
 
@@ -90,18 +93,14 @@ public struct MyCustomAction : INetAction
 }
 ```
 
-### Sending Actions (Phase 2+)
-
-Phase 1 defines the contracts but doesn't implement the send/receive infrastructure.
-Phase 2 will add:
+### Sending Actions
 
 ```csharp
-// Future API (not yet implemented)
-NetActionService.EnqueueAction(new MyCustomAction
+NetActionService.EnqueueLocalAction(new MyCustomAction
 {
     SomeValue = 42,
     SomeText = "Hello"
-});
+}, playerSlot);
 ```
 
 ## Using Feature Flags
@@ -129,14 +128,14 @@ FeatureFlagManager.SetFlag(FeatureFlag.DebugOverlay, true);
 FeatureFlagManager.SetFlag(FeatureFlag.VerboseNetworkLogging, false);
 ```
 
-### Available Flags (Phase 1)
+### Available Flags
 
 | Flag | Default | Scope | Description |
 |------|---------|-------|-------------|
 | `SoulLinkEnabled` | true | Global | Master enable/disable for all Soul Link features |
 | `SharedHealthPool` | true | Run | Shared HP pool mechanic |
 | `GoldSharing` | true | Run | Gold sharing mechanics |
-| `NetworkedActions` | **false** | Session | INetAction system (Phase 1: disabled) |
+| `NetworkedActions` | **false** | Session | INetAction system (disabled by default for testing) |
 | `DebugOverlay` | true | Session | Debug UI panel |
 | `CombatLog` | true | Session | Combat log panel |
 | `RunStatsPanel` | true | Session | Run stats panel |
@@ -146,39 +145,23 @@ FeatureFlagManager.SetFlag(FeatureFlag.VerboseNetworkLogging, false);
 
 The feature flag system allows gradual migration from legacy sync to INetAction-based sync:
 
-1. **Phase 1** (current): Contracts defined, `NetworkedActions` = false, legacy sync active
-2. **Phase 2**: Implement action send/receive infrastructure, test alongside legacy
-3. **Phase 3**: Port existing features (gold, HP) to INetAction, feature-flagged
-4. **Phase 4**: Enable `NetworkedActions` by default, deprecate legacy patches
+1. ~~**Phase 1**: Contracts defined, `NetworkedActions` = false, legacy sync active~~
+2. ~~**Phase 2**: Implement action send/receive infrastructure, test alongside legacy~~
+3. ~~**Phase 3**: Port existing features (gold, HP) to INetAction, feature-flagged~~
+4. **Phase 4** (next): Enable `NetworkedActions` by default, deprecate legacy patches
 5. **Phase 5**: Remove legacy sync code
 
-## Next Steps (Phase 2+)
+## Next Steps
 
-### Infrastructure Needed
+### Remaining Work
 
-- [ ] `NetActionService` for sending/receiving actions
-- [ ] Action queue integration (deterministic ordering)
-- [ ] Network handler registration (like `INetMessage`)
-- [ ] Action history/replay for debugging desyncs
-
-### Feature Integration
-
-- [ ] Port `GoldSyncPatch` to use `GoldChangeAction`
-- [ ] Port HP sync to use INetAction
-- [ ] Add feature-specific actions (heal, damage, relic effects)
 - [ ] Console commands for toggling flags at runtime
-
-### Persistence
-
 - [ ] Save/load global flags from mod settings
 - [ ] Broadcast run flags at run start
 - [ ] Sync flags when new player joins
+- [ ] Enable NetworkedActions by default after testing
 
 ## Testing
-
-Phase 1 is a scaffold - no runtime testing needed yet.
-
-For Phase 2+:
 1. Build the mod: `dotnet build`
 2. Run FastMP with multiple clients
 3. Toggle `NetworkedActions` flag via console

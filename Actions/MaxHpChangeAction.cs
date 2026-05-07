@@ -7,32 +7,11 @@ using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Actions;
 
-/// <summary>
-/// INetAction implementation for synchronized MaxHP changes.
-///
-/// Represents a change to MaxHp on a player's creature.
-/// Out-of-combat gains are scaled by player count.
-/// </summary>
 public struct MaxHpChangeAction : INetAction
 {
-    /// <summary>
-    /// Amount of MaxHP to change (positive = gain, negative = loss).
-    /// </summary>
     public int DeltaMaxHp;
-
-    /// <summary>
-    /// Player slot whose MaxHP is changing.
-    /// </summary>
     public int PlayerSlot;
-
-    /// <summary>
-    /// Whether this change occurred during combat (affects scaling).
-    /// </summary>
     public bool InCombat;
-
-    /// <summary>
-    /// Source/reason for the MaxHP change (for logging).
-    /// </summary>
     public string? Source;
 
     public bool ShouldBroadcast => true;

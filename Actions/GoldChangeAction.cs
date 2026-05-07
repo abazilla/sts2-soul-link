@@ -7,34 +7,11 @@ using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Actions;
 
-/// <summary>
-/// INetAction implementation for synchronized gold changes.
-///
-/// Represents a deterministic gold mutation that should be applied on all peers.
-/// Includes source tracking for logging and blocked-change tracking for relics.
-/// </summary>
 public struct GoldChangeAction : INetAction
 {
-    /// <summary>
-    /// Amount of gold to add (positive) or remove (negative).
-    /// </summary>
     public int DeltaGold;
-
-    /// <summary>
-    /// Player slot that initiated this gold change.
-    /// </summary>
     public int PlayerSlot;
-
-    /// <summary>
-    /// Source/reason for the gold change (for logging).
-    /// Null if unknown or not applicable.
-    /// </summary>
     public string? Source;
-
-    /// <summary>
-    /// Whether this gold change was blocked (e.g., by Ectoplasm).
-    /// If true, Execute() should log but not apply the change.
-    /// </summary>
     public bool WasBlocked;
 
     public bool ShouldBroadcast => true;

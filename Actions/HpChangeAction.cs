@@ -7,32 +7,11 @@ using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Actions;
 
-/// <summary>
-/// INetAction implementation for synchronized HP changes (damage/heal).
-///
-/// Represents a change to CurrentHp on a player's creature.
-/// Includes source tracking and combat context for proper scaling.
-/// </summary>
 public struct HpChangeAction : INetAction
 {
-    /// <summary>
-    /// Amount of HP to change (positive = heal, negative = damage).
-    /// </summary>
     public int DeltaHp;
-
-    /// <summary>
-    /// Player slot whose HP is changing.
-    /// </summary>
     public int PlayerSlot;
-
-    /// <summary>
-    /// Whether this change occurred during combat (affects scaling).
-    /// </summary>
     public bool InCombat;
-
-    /// <summary>
-    /// Source/reason for the HP change (for logging).
-    /// </summary>
     public string? Source;
 
     public bool ShouldBroadcast => true;
