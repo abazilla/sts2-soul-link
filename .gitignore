@@ -10,3 +10,14 @@ Local.props
 .mcp.json
 package-lock.json
 Local.props
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads/
+.beads-credential-key
+.sandcastle/
+*.db
+
+# AI agent config files
+AGENTS.md
+CLAUDE.md
