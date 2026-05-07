@@ -128,7 +128,28 @@ internal static class GoldChangeActionHandler
     internal static void Handle(NetActionMessage<GoldChangeAction> message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
-        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.PlayerSlot);
+
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+
+        // In SharedPool mode, deterministic events (e.g. enemy gold steal) execute the same setter
+        // on both machines. Both sides apply the delta independently and broadcast an action.
+        // Check if this delta was already applied by a deterministic local setter (before the remote
+        // action arrived). If so, skip to avoid double-apply.
+        if (goldMode == GoldSharingMode.SharedPool &&
+            message.Action.DeltaGold != 0 &&
+            GoldSyncPatch.TryConsumeCancellation(message.Action.PlayerSlot, message.Action.DeltaGold))
+        {
+            GD.Print($"[SoulLink][GoldChangeAction] Consumed cancellation for slot={message.Action.PlayerSlot} delta={message.Action.DeltaGold}");
+            return;
+        }
+
+        // Mark this action as applied so the setter (if it fires after this handler) can recognize it.
+        if (goldMode == GoldSharingMode.SharedPool && message.Action.DeltaGold != 0)
+        {
+            GoldSyncPatch.EnqueueNetworkApplied(message.Action.PlayerSlot);
+        }
+
+        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
     }
 }
 
