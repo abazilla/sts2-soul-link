@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using Godot;
 using HarmonyLib;
+using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -250,13 +251,27 @@ public static class GoldSyncPatch
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Broadcast the canonical gold and the actual scaled delta.
-        RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
+        // Broadcast the gold change.
+        // If NetworkedActions flag is enabled, send via INetAction; otherwise use legacy message.
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
         {
-            CanonicalGold = canonical,
-            Delta         = broadcastDelta,
-            PlayerSlot    = playerSlot,
-        });
+            NetActionService.EnqueueLocalAction(new GoldChangeAction
+            {
+                DeltaGold = broadcastDelta,
+                PlayerSlot = playerSlot,
+                Source = source,
+                WasBlocked = false,
+            }, playerSlot);
+        }
+        else
+        {
+            RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
+            {
+                CanonicalGold = canonical,
+                Delta         = broadcastDelta,
+                PlayerSlot    = playerSlot,
+            });
+        }
 
         CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();

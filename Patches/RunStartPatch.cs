@@ -4,6 +4,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Patches;
@@ -97,6 +98,37 @@ internal static class SettingsSyncHandler
 
         // Refresh the settings panel on the client (read-only view).
         UI.SoulLinkSettingsPanel.Current?.Refresh();
+    }
+}
+
+internal static class GoldChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<NetActionMessage<GoldChangeAction>>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        GD.Print("[SoulLink] GoldChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<GoldChangeAction>>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(NetActionMessage<GoldChangeAction> message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.PlayerSlot);
     }
 }
 
@@ -223,6 +255,7 @@ public static class RunLaunchPatch
         if (runState.Players.Count > 1)
         {
             RunManager.Instance!.NetService.RegisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            GoldChangeActionHandler.TryRegister();
             SettingsSyncHandler.TryRegister(); // safe even if lobby already registered it
         }
 
@@ -232,6 +265,7 @@ public static class RunLaunchPatch
         {
             // Solo run — unregister what we just registered.
             RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            GoldChangeActionHandler.TryUnregister();
             SettingsSyncHandler.TryUnregister();
             GD.Print("[SoulLink] Solo run — session inactive.");
             return;
@@ -277,8 +311,10 @@ public static class RunCleanUpPatch
         GD.Print("[SoulLink] Run ended. Clearing session.");
 
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+        GoldChangeActionHandler.TryUnregister();
         SettingsSyncHandler.TryUnregister();
         GoldSyncPatch.ClearCancellations();
+        NetActionService.Reset();
 
         SoulLinkSession.OnRunEnd();
     }

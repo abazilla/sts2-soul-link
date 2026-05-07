@@ -5,19 +5,13 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
-namespace SoulLinkMod.Examples;
+namespace SoulLinkMod.Actions;
 
 /// <summary>
-/// Example INetAction implementation: synchronized gold change.
+/// INetAction implementation for synchronized gold changes.
 ///
-/// Demonstrates the INetAction pattern for deterministic multiplayer state changes.
-/// This is a reference implementation showing:
-/// - Serialization/deserialization of action data
-/// - Feature flag checking before execution
-/// - Deterministic effect application
-///
-/// Phase 1: This is a scaffold/example only. Actual gold sync still uses GoldSyncPatch.
-/// Phase 2+: Replace direct patching with action-based sync when NetworkedActions flag is enabled.
+/// Represents a deterministic gold mutation that should be applied on all peers.
+/// Includes source tracking for logging and blocked-change tracking for relics.
 /// </summary>
 public struct GoldChangeAction : INetAction
 {
@@ -43,8 +37,8 @@ public struct GoldChangeAction : INetAction
     /// </summary>
     public bool WasBlocked;
 
-    public bool ShouldBroadcast => true; // All clients need to see gold changes
-    public NetTransferMode Mode => NetTransferMode.Reliable; // Critical state change
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 
     public void Serialize(PacketWriter writer)
@@ -52,7 +46,6 @@ public struct GoldChangeAction : INetAction
         writer.WriteInt(DeltaGold);
         writer.WriteInt(PlayerSlot);
 
-        // Optional string: use bool guard for null safety
         bool hasSource = Source != null;
         writer.WriteBool(hasSource);
         if (hasSource)
@@ -76,20 +69,12 @@ public struct GoldChangeAction : INetAction
 
     public void Execute(INetActionContext context)
     {
-        // Check feature flags
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
-        {
-            // Fall back to legacy sync (GoldSyncPatch handles this)
             return;
-        }
 
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.GoldSharing))
-        {
-            // Gold sharing disabled, skip
             return;
-        }
 
-        // Get run state
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
@@ -103,29 +88,41 @@ public struct GoldChangeAction : INetAction
             return;
         }
 
-        // Log the action
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string blockedStr = WasBlocked ? " [BLOCKED]" : "";
         GD.Print($"[SoulLink][GoldChangeAction] Execute: player={PlayerSlot} delta={DeltaGold}{sourceStr}{blockedStr} isLocal={context.IsLocal}");
 
         if (WasBlocked)
+            return;
+
+        // On the local machine, the GoldSyncPatch already applied the delta and mirrored to all players.
+        // Only remote machines need to apply the delta through this action.
+        if (context.IsLocal)
         {
-            // Blocked changes are logged but not applied (but we still log them for visibility)
+            GD.Print($"[SoulLink][GoldChangeAction] Skipping local execution (already applied by patch)");
             return;
         }
 
         int playerCount = runState.Players.Count;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
-        // Apply gold change through the canonical path
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
             int canonical = SoulLinkSession.ApplyGoldDelta(DeltaGold, playerCount, PlayerSlot, blocked: false, source: Source);
 
-            // Mirror canonical to all other player objects
-            for (int i = 0; i < runState.Players.Count; i++)
+            if (goldMode == GoldSharingMode.SplitByPlayer)
             {
-                if (i != PlayerSlot)
+                // In SplitByPlayer, each player shows their own gold
+                for (int i = 0; i < runState.Players.Count; i++)
+                {
+                    runState.Players[i].Gold = SoulLinkSession.GetPlayerGold(i);
+                }
+            }
+            else
+            {
+                // In SharedPool, all players see the same canonical value
+                for (int i = 0; i < runState.Players.Count; i++)
                 {
                     runState.Players[i].Gold = canonical;
                 }
@@ -136,7 +133,6 @@ public struct GoldChangeAction : INetAction
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Refresh UI panels if available
         CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
