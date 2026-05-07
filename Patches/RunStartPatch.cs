@@ -153,6 +153,68 @@ internal static class GoldChangeActionHandler
     }
 }
 
+internal static class HpChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<NetActionMessage<HpChangeAction>>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        GD.Print("[SoulLink] HpChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<HpChangeAction>>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(NetActionMessage<HpChangeAction> message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
+    }
+}
+
+internal static class MaxHpChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<NetActionMessage<MaxHpChangeAction>>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        GD.Print("[SoulLink] MaxHpChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<MaxHpChangeAction>>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(NetActionMessage<MaxHpChangeAction> message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
+    }
+}
+
 internal static class GoldSyncHandler
 {
     /// <summary>
@@ -277,6 +339,8 @@ public static class RunLaunchPatch
         {
             RunManager.Instance!.NetService.RegisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
             GoldChangeActionHandler.TryRegister();
+            HpChangeActionHandler.TryRegister();
+            MaxHpChangeActionHandler.TryRegister();
             SettingsSyncHandler.TryRegister(); // safe even if lobby already registered it
         }
 
@@ -287,6 +351,8 @@ public static class RunLaunchPatch
             // Solo run — unregister what we just registered.
             RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
             GoldChangeActionHandler.TryUnregister();
+            HpChangeActionHandler.TryUnregister();
+            MaxHpChangeActionHandler.TryUnregister();
             SettingsSyncHandler.TryUnregister();
             GD.Print("[SoulLink] Solo run — session inactive.");
             return;
@@ -333,6 +399,8 @@ public static class RunCleanUpPatch
 
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
         GoldChangeActionHandler.TryUnregister();
+        HpChangeActionHandler.TryUnregister();
+        MaxHpChangeActionHandler.TryUnregister();
         SettingsSyncHandler.TryUnregister();
         GoldSyncPatch.ClearCancellations();
         NetActionService.Reset();

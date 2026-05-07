@@ -3,6 +3,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Patches;
@@ -73,6 +74,18 @@ public static class MaxHpSyncPatch
         finally
         {
             SoulLinkMod.ApplyingCanonical = false;
+        }
+
+        // Broadcast the MaxHP change.
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        {
+            NetActionService.EnqueueLocalAction(new MaxHpChangeAction
+            {
+                DeltaMaxHp = delta,
+                PlayerSlot = playerSlot,
+                InCombat = inCombat,
+                Source = source,
+            }, playerSlot);
         }
 
         CombatLogPanel.Current?.Refresh();

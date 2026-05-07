@@ -3,6 +3,7 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Patches;
@@ -71,6 +72,18 @@ public static class HpSyncPatch
         finally
         {
             SoulLinkMod.ApplyingCanonical = false;
+        }
+
+        // Broadcast the HP change.
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        {
+            NetActionService.EnqueueLocalAction(new HpChangeAction
+            {
+                DeltaHp = delta,
+                PlayerSlot = playerSlot,
+                InCombat = inCombat,
+                Source = source,
+            }, playerSlot);
         }
 
         CombatLogPanel.Current?.Refresh();
