@@ -60,6 +60,13 @@ public enum FeatureFlag
     /// Useful for debugging desync issues.
     /// </summary>
     VerboseNetworkLogging,
+
+    /// <summary>
+    /// Enables VGQ (Vanilla GameAction Queue) synchronization for HP changes.
+    /// When true, HP changes use custom GameAction subclasses with vanilla queue integration.
+    /// When false, falls back to MNA (Mod Net Action) pipeline.
+    /// </summary>
+    UseVGQSync,
 }
 
 /// <summary>
