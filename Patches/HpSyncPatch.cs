@@ -106,8 +106,7 @@ public static class HpSyncPatch
             }
         }
         // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
-        else
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
+        else if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
             && !inCombat)
         {
