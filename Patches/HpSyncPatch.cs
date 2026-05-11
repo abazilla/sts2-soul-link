@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
+using SoulLinkMod.VGQ;
 
 namespace SoulLinkMod.Patches;
 
