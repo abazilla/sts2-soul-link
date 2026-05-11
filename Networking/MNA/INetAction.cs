@@ -5,11 +5,15 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 namespace SoulLinkMod;
 
 /// <summary>
-/// Contract for networked game actions that need to be synchronized across all peers.
+/// MOD-LOCAL contract for networked game actions in the Soul Link MNA (Mod Net Action) pipeline.
+///
+/// IMPORTANT: This is NOT the vanilla GameAction.INetAction used by ToNetAction()/ToGameAction().
+/// This is a transitional mod-specific interface for action-based synchronization outside the
+/// vanilla action queue. See ADR 0001 for migration path to vanilla GameAction queue (VGQ).
 ///
 /// Similar to INetMessage but specifically for game state mutations that must execute
 /// in a deterministic order on all clients. Actions implementing this interface will
-/// be automatically serialized, transmitted, and executed on remote peers.
+/// be serialized, transmitted, and executed via NetActionService (not vanilla action queue).
 ///
 /// Key differences from INetMessage:
 /// - INetAction represents a state-changing operation (e.g., gain gold, heal, damage)
@@ -20,8 +24,9 @@ namespace SoulLinkMod;
 /// 2. Provide an Execute() method that applies the action's effects
 /// 3. Be deterministic - same inputs produce same outputs on all clients
 /// 4. Handle feature flags appropriately (check before execution)
+/// 5. Have a corresponding *SyncMessage type for network transport (see NetActionService)
 ///
-/// STS2 will auto-register implementations via ReflectionHelper.GetSubtypesInMods&lt;INetAction&gt;().
+/// Registration: Handled manually by NetActionService, NOT auto-discovered by STS2 reflection.
 /// </summary>
 public interface INetAction : IPacketSerializable
 {

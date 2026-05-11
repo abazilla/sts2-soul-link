@@ -19,21 +19,117 @@ The feature flag system (`FeatureFlagManager`) allows runtime enabling/disabling
 - **Run**: Active for the current run only
 - **Session**: Active for the current play session only
 
+## Naming Clarity: Two Different INetAction Types
+
+**IMPORTANT**: There are two distinct types both named "INetAction" in STS2 modding:
+
+### 1. Vanilla Game INetAction (GameAction Network Representation)
+
+**Location**: `MegaCrit.Sts2.Core.GameActions` namespace  
+**Purpose**: Network serialization format paired with vanilla `GameAction` types  
+**Usage**: `GameAction.ToNetAction()` and `GameAction.ToGameAction()`  
+**Registration**: Automatic via GameAction queue integration  
+**Lifecycle**: Part of vanilla action queue execution  
+
+This is STS2's built-in multiplayer synchronization mechanism. When a `GameAction` needs to replicate across peers, it converts to an INetAction for network transport, then back to a `GameAction` on the receiving end.
+
+**Example vanilla types**: `CardPlayedGameAction`, `GoldLostGameAction`, `DamageReceivedGameAction`
+
+### 2. Mod INetAction (Soul Link MNA Contract)
+
+**Location**: `SoulLinkMod` namespace (defined in `Networking/MNA/INetAction.cs`)  
+**Purpose**: Mod-local action contract for MNA (Mod Net Action) pipeline  
+**Usage**: `NetActionService.EnqueueLocalAction(action)`  
+**Registration**: Manual handler registration in NetActionService  
+**Lifecycle**: Separate from vanilla action queue (for now)  
+
+This is Soul Link's transitional synchronization mechanism. It provides action-based ordering guarantees without coupling to vanilla `GameAction`. **This will be deprecated** once we migrate to vanilla GameAction queue (VGQ architecture).
+
+**Example mod types**: `HpChangeAction`, `GoldChangeAction`, `MaxHpChangeAction`
+
+### Key Differences
+
+| Aspect | Vanilla INetAction | Mod INetAction |
+|--------|-------------------|----------------|
+| **Namespace** | `MegaCrit.Sts2.Core.GameActions` | `SoulLinkMod` |
+| **Paired with** | `GameAction` subclass | Standalone struct |
+| **Queue integration** | ✅ Vanilla action queue | ❌ Separate pipeline (MNA) |
+| **Auto-discovery** | ✅ Via GameAction registration | ❌ Manual handler setup |
+| **Serialization** | Via GameAction converter | Via `*SyncMessage` wrapper |
+| **Long-term status** | Target architecture (VGQ) | Transitional (to be removed) |
+
+### Why This Matters for LLMs and Developers
+
+When reading documentation or code:
+- **"INetAction"** without namespace qualifier is ambiguous
+- **"ToNetAction()"** refers to vanilla GameAction conversion (not mod type)
+- **"NetActionService"** handles mod INetAction (not vanilla)
+- **"Action queue"** usually means vanilla GameAction queue (not mod pipeline)
+
+Always check the namespace and context to determine which INetAction type is being discussed.
+
+## Migration Checklist: MNA → VGQ
+
+When converting a mod INetAction to vanilla GameAction queue:
+
+### 1. Design Phase
+- [ ] Identify which vanilla `GameAction` subclass pattern to follow
+- [ ] Determine if action needs custom `INetAction` or can reuse vanilla format
+- [ ] Check if action should run in combat queue vs meta queue
+- [ ] Verify action priority/ordering relative to vanilla actions
+
+### 2. Implementation Phase
+- [ ] Create custom `GameAction` subclass in appropriate namespace
+- [ ] Implement `Apply()` method with deterministic state changes
+- [ ] Implement `ToNetAction()` to serialize action for network transport
+- [ ] Implement static `ToGameAction(INetAction)` to deserialize from network
+- [ ] Ensure serialization includes all fields needed for deterministic execution
+- [ ] Add owner ID tracking if action is player-specific
+
+### 3. Integration Phase
+- [ ] Replace `NetActionService.EnqueueLocalAction()` calls with `QueueGameAction()`
+- [ ] Remove corresponding `*SyncMessage` type (no longer needed)
+- [ ] Remove handler registration from `NetActionService`
+- [ ] Update Harmony patches to queue GameAction instead of calling NetActionService
+- [ ] Verify feature flag checks still work in new location
+
+### 4. Testing Phase
+- [ ] Test in FastMP with 2+ clients
+- [ ] Verify action appears in vanilla action queue history
+- [ ] Confirm deterministic execution (same checksums across peers)
+- [ ] Test timing edge cases (combat start/end, run start, etc.)
+- [ ] Compare state with MNA implementation to verify equivalence
+- [ ] Check logs for serialization/deserialization errors
+
+### 5. Cleanup Phase
+- [ ] Remove old MNA action struct and message types
+- [ ] Update documentation to reference new GameAction location
+- [ ] Add migration note explaining why old code was replaced
+- [ ] Update feature flags (deprecate MNA-specific flags)
+
+### Common Pitfalls
+
+❌ **Using mod INetAction when vanilla INetAction intended**: Check namespace!  
+❌ **Forgetting owner ID**: Player-specific actions need owner tracking for proper queue behavior  
+❌ **Non-deterministic serialization**: Field order and optional values must match exactly  
+❌ **Assuming auto-registration**: Vanilla INetAction requires GameAction pairing, not standalone  
+❌ **Wrong queue**: Combat actions go in combat queue, meta actions (gold, heal) in meta queue
+
 ## Implementation Status
 
 ### Files
 
-1. **INetAction.cs** - Core action contract and context interface
-2. **NetActionContext.cs** - Default implementation of action execution context
-3. **NetActionService.cs** - Service for sending/receiving actions
-4. **Messages/HpChangeSyncMessage.cs** - Concrete message type for HP sync
-5. **Messages/MaxHpChangeSyncMessage.cs** - Concrete message type for MaxHP sync
-6. **Messages/GoldChangeSyncMessage.cs** - Concrete message type for gold sync
+1. **Networking/MNA/INetAction.cs** - Mod-local action contract and context interface
+2. **Networking/MNA/NetActionContext.cs** - Default implementation of action execution context
+3. **Networking/MNA/NetActionService.cs** - Service for sending/receiving mod actions
+4. **Networking/MNA/Messages/HpChangeSyncMessage.cs** - Concrete message type for HP sync
+5. **Networking/MNA/Messages/MaxHpChangeSyncMessage.cs** - Concrete message type for MaxHP sync
+6. **Networking/MNA/Messages/GoldChangeSyncMessage.cs** - Concrete message type for gold sync
 7. **FeatureFlags.cs** - Enum of available feature flags and scopes
 8. **FeatureFlagManager.cs** - Manager for checking and setting flags
-9. **Actions/GoldChangeAction.cs** - Gold sync via INetAction
-10. **Actions/HpChangeAction.cs** - HP sync via INetAction
-11. **Actions/MaxHpChangeAction.cs** - MaxHP sync via INetAction
+9. **Networking/MNA/Actions/GoldChangeAction.cs** - Gold sync via mod INetAction
+10. **Networking/MNA/Actions/HpChangeAction.cs** - HP sync via mod INetAction
+11. **Networking/MNA/Actions/MaxHpChangeAction.cs** - MaxHP sync via mod INetAction
 
 ### Current State
 
