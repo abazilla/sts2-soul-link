@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
@@ -13,10 +14,6 @@ namespace SoulLinkMod.VGQ;
 /// <summary>
 /// VGQ (Vanilla GameAction Queue) implementation for Soul Link Gold synchronization.
 ///
-/// PROTOTYPE STATUS: This is a scaffold demonstrating VGQ architecture patterns.
-/// ToNetAction() and ActionType require further investigation into STS2's internal
-/// types (GameActionType enum and INetAction interface location unknown).
-///
 /// This GameAction subclass integrates with STS2's native action queue to provide
 /// deterministic ordering guarantees for Gold changes across multiplayer peers.
 ///
@@ -24,20 +21,7 @@ namespace SoulLinkMod.VGQ;
 /// - Integrated with vanilla action queue (not separate pipeline)
 /// - Uses ToNetAction()/ToGameAction() for network serialization
 /// - Relies on queue ordering instead of deduplication dictionaries
-///
-/// BLOCKERS:
-/// - GameActionType enum location unknown (not in GameActions, Context, or Multiplayer namespaces)
-/// - INetAction interface location unknown (not in GameActions namespace)
-/// - Serialization pattern for custom GameAction subclasses needs research
 /// </summary>
-// NOTE: Currently cannot compile due to unknown types. Keeping as documentation of intended VGQ architecture.
-// To make this compilable, would need to:
-// 1. Locate GameActionType enum (checked: GameActions, Context, Multiplayer namespaces - not found)
-// 2. Locate INetAction interface for serialization (checked: GameActions namespace - not found)
-// 3. Understand vanilla GameAction serialization pattern
-//
-// For now, commented out to allow project to build. Uncomment when types are located.
-/*
 public class SoulLinkGoldChangeGameAction : GameAction
 {
     public int DeltaGold { get; private set; }
@@ -63,10 +47,20 @@ public class SoulLinkGoldChangeGameAction : GameAction
     {
     }
 
-    // TODO: Determine correct ActionType enum and value
-    // public override GameActionType ActionType => GameActionType.Meta;
+    public override GameActionType ActionType => GameActionType.NonCombat;
 
     public override ulong OwnerId => 0; // System-owned action (not tied to a specific player)
+
+    public override MegaCrit.Sts2.Core.GameActions.Multiplayer.INetAction ToNetAction()
+    {
+        return new SoulLinkGoldChangeNetAction
+        {
+            DeltaGold = this.DeltaGold,
+            PlayerSlot = this.PlayerSlot,
+            Mode = this.Mode,
+            Source = this.Source
+        };
+    }
 
     /// <summary>
     /// Execute the Gold change deterministically on all peers.
@@ -150,4 +144,44 @@ public class SoulLinkGoldChangeGameAction : GameAction
         DebugOverlay.Current?.Refresh();
     }
 }
-*/
+
+/// <summary>
+/// Network representation of SoulLinkGoldChangeGameAction for serialization.
+/// </summary>
+public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multiplayer.INetAction
+{
+    public int DeltaGold { get; set; }
+    public int PlayerSlot { get; set; }
+    public GoldSharingMode Mode { get; set; }
+    public string? Source { get; set; }
+
+    public GameAction ToGameAction(MegaCrit.Sts2.Core.Entities.Players.Player player)
+    {
+        return new SoulLinkGoldChangeGameAction(DeltaGold, PlayerSlot, Mode, Source);
+    }
+
+    public void Serialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketWriter writer)
+    {
+        writer.WriteInt(DeltaGold, 32);
+        writer.WriteInt(PlayerSlot, 8);
+        writer.WriteEnum(Mode);
+        if (Source != null)
+        {
+            writer.WriteBool(true);
+            writer.WriteString(Source);
+        }
+        else
+        {
+            writer.WriteBool(false);
+        }
+    }
+
+    public void Deserialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketReader reader)
+    {
+        DeltaGold = reader.ReadInt(32);
+        PlayerSlot = reader.ReadInt(8);
+        Mode = reader.ReadEnum<GoldSharingMode>();
+        bool hasSource = reader.ReadBool();
+        Source = hasSource ? reader.ReadString() : null;
+    }
+}
