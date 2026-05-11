@@ -246,6 +246,8 @@ Using concrete message types like `HpChangeSyncMessage` instead of `NetActionMes
 
 ## References
 
-- Existing network messages: `SoulLinkGoldSyncMessage.cs`, `SoulLinkSettingsSyncMessage.cs`
+- **ADR 0001**: [Queue-First Synchronization Architecture](docs/adr/0001-queue-first-synchronization.md) - Architectural decision to use vanilla GameAction queue over dual pipeline
+- Existing network messages: `Networking/Session/SoulLinkSettingsSyncMessage.cs`, `Networking/Wire/SoulLinkGoldSyncMessage.cs`
 - Existing sync patches: `Patches/GoldSyncPatch.cs`, `Patches/HpSyncPatch.cs`
+- MNA infrastructure: `Networking/MNA/` - Transitional action-based synchronization (to be replaced by VGQ)
 - STS2 multiplayer docs: See CLAUDE.md "Slay the Spire 2 Multiplayer" section

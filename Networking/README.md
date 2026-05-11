@@ -64,4 +64,4 @@ Target architecture for multiplayer synchronization. Will contain custom `GameAc
 ## Related Documentation
 
 - `INETACTION_GUIDE.md` - INetAction usage and patterns
-- ADR (to be created) - Queue-first vs dual pipeline decision
+- [ADR 0001: Queue-First Synchronization](../docs/adr/0001-queue-first-synchronization.md) - Queue-first vs dual pipeline decision
