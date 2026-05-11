@@ -66,5 +66,13 @@ public static class ActionQueueSynchronizer
     {
         RequestEnqueue(new SoulLinkMaxHpChangeGameAction(deltaMaxHp, playerSlot, inCombat, source));
     }
+
+    /// <summary>
+    /// Convenience method for enqueueing Gold change actions.
+    /// </summary>
+    public static void RequestEnqueueGoldChange(int deltaGold, int playerSlot, GoldSharingMode mode, string? source = null)
+    {
+        RequestEnqueue(new SoulLinkGoldChangeGameAction(deltaGold, playerSlot, mode, source));
+    }
 }
 */
