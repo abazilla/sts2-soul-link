@@ -93,6 +93,19 @@ public static class MaxHpSyncPatch
         // Broadcast the MaxHP change.
         // Skip during init phase (Neow) and combat - both are deterministic.
         // Combat: game syncs card plays, each client processes independently.
+
+        // VGQ path: Use vanilla GameAction queue (target architecture, currently blocked)
+        // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
+        //     && SoulLinkSession.IsInitPhaseComplete
+        //     && !inCombat)
+        // {
+        //     if (isLocalPlayer)
+        //     {
+        //         // Enqueue MaxHP change to vanilla action queue (VGQ architecture)
+        //         ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
+        //     }
+        // }
+        // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
         if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
             && !inCombat)
