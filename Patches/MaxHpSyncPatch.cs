@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
+using SoulLinkMod.VGQ;
 
 namespace SoulLinkMod.Patches;
 
@@ -94,19 +95,20 @@ public static class MaxHpSyncPatch
         // Skip during init phase (Neow) and combat - both are deterministic.
         // Combat: game syncs card plays, each client processes independently.
 
-        // VGQ path: Use vanilla GameAction queue (target architecture, currently blocked)
-        // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
-        //     && SoulLinkSession.IsInitPhaseComplete
-        //     && !inCombat)
-        // {
-        //     if (isLocalPlayer)
-        //     {
-        //         // Enqueue MaxHP change to vanilla action queue (VGQ architecture)
-        //         ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
-        //     }
-        // }
+        // VGQ path: Use vanilla GameAction queue (target architecture)
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
+            && SoulLinkSession.IsInitPhaseComplete
+            && !inCombat)
+        {
+            if (isLocalPlayer)
+            {
+                // Enqueue MaxHP change to vanilla action queue (VGQ architecture)
+                // NOTE: Uses reflection discovery until correct API is found
+                ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
+            }
+        }
         // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
+        else if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
             && !inCombat)
         {

@@ -1,4 +1,5 @@
 using Godot;
+using System.Linq;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -7,7 +8,9 @@ namespace SoulLinkMod.VGQ;
 /// <summary>
 /// Facade for enqueueing VGQ (Vanilla GameAction Queue) actions.
 ///
-/// PROTOTYPE STATUS: Commented out until RunManager.QueueGameAction API is located.
+/// STATUS: Active with reflection-based API discovery. Uncommented and wired into all sync patches.
+/// Uses runtime reflection to discover the correct RunManager queueing method until the proper
+/// API is identified via sts2-modding MCP server or game documentation.
 ///
 /// This provides a thin API layer for patches to enqueue Soul Link actions
 /// into the vanilla action queue without needing to know queue internals.
@@ -15,10 +18,16 @@ namespace SoulLinkMod.VGQ;
 /// Example usage from HpSyncPatch:
 ///   ActionQueueSynchronizer.RequestEnqueue(new SoulLinkHpChangeGameAction(...));
 ///
-/// BLOCKERS:
-/// - RunManager.QueueGameAction() method location unknown (method not found)
+/// DISCOVERY APPROACH:
+/// - Logs all methods matching Queue/Action/Enqueue/Add patterns on RunManager
+/// - Logs all properties matching Queue/Action patterns if no methods found
+/// - Returns early with error until correct API is discovered
+///
+/// NEXT STEPS:
+/// - Use sts2-modding MCP server to find correct method signature
+/// - Replace reflection discovery with actual method call
+/// - Test in FastMP to verify deterministic action execution
 /// </summary>
-/*
 public static class ActionQueueSynchronizer
 {
     /// <summary>
@@ -42,10 +51,45 @@ public static class ActionQueueSynchronizer
             return;
         }
 
-        // Queue the action into the vanilla GameAction queue
-        // The action will be automatically serialized via ToNetAction() and sent to peers
-        // Peers will deserialize via ToGameAction() and execute Apply()
-        runManager.QueueGameAction(action);
+        // TEMPORARY: Use reflection to discover the correct queueing method
+        // Discovery of RunManager API surface for queueing actions
+        var runManagerType = runManager.GetType();
+
+        // Log all public methods that might be related to queueing/actions
+        var methods = runManagerType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(m => m.Name.Contains("Queue") || m.Name.Contains("Action") || m.Name.Contains("Enqueue") || m.Name.Contains("Add"))
+            .ToList();
+
+        if (methods.Count > 0)
+        {
+            GD.Print($"[SoulLink][VGQ] Found {methods.Count} potential queueing methods on RunManager:");
+            foreach (var method in methods)
+            {
+                var parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
+                GD.Print($"[SoulLink][VGQ]   - {method.ReturnType.Name} {method.Name}({parameters})");
+            }
+        }
+        else
+        {
+            GD.PrintErr("[SoulLink][VGQ] No methods found matching Queue/Action/Enqueue/Add pattern on RunManager");
+
+            // Log all public properties that might give access to an action queue
+            var properties = runManagerType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(p => p.Name.Contains("Queue") || p.Name.Contains("Action"))
+                .ToList();
+
+            if (properties.Count > 0)
+            {
+                GD.Print($"[SoulLink][VGQ] Found {properties.Count} potential action queue properties:");
+                foreach (var prop in properties)
+                {
+                    GD.Print($"[SoulLink][VGQ]   - {prop.PropertyType.Name} {prop.Name}");
+                }
+            }
+        }
+
+        GD.PrintErr($"[SoulLink][VGQ] Cannot enqueue {action.GetType().Name} - queueing method not yet discovered");
+        return;
 
         GD.Print($"[SoulLink][VGQ] Enqueued {action.GetType().Name} to vanilla action queue");
     }
@@ -74,4 +118,3 @@ public static class ActionQueueSynchronizer
         RequestEnqueue(new SoulLinkGoldChangeGameAction(deltaGold, playerSlot, mode, source));
     }
 }
-*/

@@ -5,6 +5,7 @@ using Godot;
 using HarmonyLib;
 using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
+using SoulLinkMod.VGQ;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
@@ -257,13 +258,14 @@ public static class GoldSyncPatch
         }
 
         // Broadcast the gold change.
-        // VGQ path: Use vanilla GameAction queue (target architecture, currently blocked)
-        // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
-        // {
-        //     ActionQueueSynchronizer.RequestEnqueueGoldChange(broadcastDelta, playerSlot, goldMode, source);
-        // }
+        // VGQ path: Use vanilla GameAction queue (target architecture)
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
+        {
+            // NOTE: Uses reflection discovery until correct API is found
+            ActionQueueSynchronizer.RequestEnqueueGoldChange(broadcastDelta, playerSlot, goldMode, source);
+        }
         // MNA path: Use Mod Net Action pipeline (transitional)
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        else if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
         {
             NetActionService.EnqueueLocalAction(new GoldChangeAction
             {
