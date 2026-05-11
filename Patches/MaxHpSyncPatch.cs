@@ -21,8 +21,6 @@ namespace SoulLinkMod.Patches;
 [HarmonyPatch(typeof(Creature))]
 public static class MaxHpSyncPatch
 {
-    internal static int DebugGetQueueSize() => 0;
-
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Creature), nameof(Creature.MaxHp));
 

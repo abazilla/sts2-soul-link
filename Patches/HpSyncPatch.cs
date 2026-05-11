@@ -24,8 +24,6 @@ namespace SoulLinkMod.Patches;
 [HarmonyPatch(typeof(Creature))]
 public static class HpSyncPatch
 {
-    internal static int DebugGetQueueSize() => 0;
-
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Creature), nameof(Creature.CurrentHp));
 
