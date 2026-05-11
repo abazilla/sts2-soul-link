@@ -51,6 +51,33 @@ public static class ActionQueueSynchronizer
             return;
         }
 
+        // Try common API patterns before falling back to reflection
+        // Pattern 1: Static method on GameAction
+        try
+        {
+            var queueMethod = typeof(GameAction).GetMethod("Queue", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (queueMethod != null)
+            {
+                queueMethod.Invoke(null, new object[] { action });
+                GD.Print($"[SoulLink][VGQ] Successfully enqueued {action.GetType().Name} via GameAction.Queue()");
+                return;
+            }
+        }
+        catch { }
+
+        // Pattern 2: Instance method on RunManager
+        try
+        {
+            var queueMethod = runManager.GetType().GetMethod("Queue", new[] { typeof(GameAction) });
+            if (queueMethod != null)
+            {
+                queueMethod.Invoke(runManager, new object[] { action });
+                GD.Print($"[SoulLink][VGQ] Successfully enqueued {action.GetType().Name} via runManager.Queue()");
+                return;
+            }
+        }
+        catch { }
+
         // TEMPORARY: Use reflection to discover the correct queueing method
         // Discovery of RunManager API surface for queueing actions
         var runManagerType = runManager.GetType();
