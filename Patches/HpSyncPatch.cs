@@ -91,6 +91,21 @@ public static class HpSyncPatch
         // Skip during init phase (Neow) and combat - both are deterministic.
         // Combat: game syncs card plays, each client processes independently.
         // Broadcasting during combat causes race with relics like Rupture.
+
+        // VGQ path: Use vanilla GameAction queue for synchronization
+        // NOTE: VGQ implementation currently blocked on type resolution (see VGQ/SoulLinkHpChangeGameAction.cs)
+        // TODO: Uncomment when SoulLinkHpChangeGameAction and ActionQueueSynchronizer are functional
+        // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
+        //     && SoulLinkSession.IsInitPhaseComplete
+        //     && !inCombat)
+        // {
+        //     if (isLocalPlayer)
+        //     {
+        //         // Enqueue HP change to vanilla action queue (VGQ architecture)
+        //         ActionQueueSynchronizer.RequestEnqueueHpChange(delta, playerSlot, inCombat, source);
+        //     }
+        // }
+        // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
         if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
             && !inCombat)

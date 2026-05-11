@@ -257,7 +257,12 @@ public static class GoldSyncPatch
         }
 
         // Broadcast the gold change.
-        // If NetworkedActions flag is enabled, send via INetAction; otherwise use legacy message.
+        // VGQ path: Use vanilla GameAction queue (target architecture, currently blocked)
+        // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
+        // {
+        //     ActionQueueSynchronizer.RequestEnqueueGoldChange(broadcastDelta, playerSlot, goldMode, source);
+        // }
+        // MNA path: Use Mod Net Action pipeline (transitional)
         if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
         {
             NetActionService.EnqueueLocalAction(new GoldChangeAction
@@ -268,6 +273,7 @@ public static class GoldSyncPatch
                 WasBlocked = false,
             }, playerSlot);
         }
+        // Legacy Wire path: Direct gold sync message (to be deprecated)
         else
         {
             RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
