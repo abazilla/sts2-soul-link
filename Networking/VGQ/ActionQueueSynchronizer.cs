@@ -1,5 +1,4 @@
 using Godot;
-using System.Linq;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -8,25 +7,14 @@ namespace SoulLinkMod.VGQ;
 /// <summary>
 /// Facade for enqueueing VGQ (Vanilla GameAction Queue) actions.
 ///
-/// STATUS: Active with reflection-based API discovery. Uncommented and wired into all sync patches.
-/// Uses runtime reflection to discover the correct RunManager queueing method until the proper
-/// API is identified via sts2-modding MCP server or game documentation.
-///
 /// This provides a thin API layer for patches to enqueue Soul Link actions
 /// into the vanilla action queue without needing to know queue internals.
 ///
+/// The vanilla game's ActionQueueSynchronizer handles deterministic ordering
+/// and multiplayer synchronization of GameActions.
+///
 /// Example usage from HpSyncPatch:
 ///   ActionQueueSynchronizer.RequestEnqueue(new SoulLinkHpChangeGameAction(...));
-///
-/// DISCOVERY APPROACH:
-/// - Logs all methods matching Queue/Action/Enqueue/Add patterns on RunManager
-/// - Logs all properties matching Queue/Action patterns if no methods found
-/// - Returns early with error until correct API is discovered
-///
-/// NEXT STEPS:
-/// - Use sts2-modding MCP server to find correct method signature
-/// - Replace reflection discovery with actual method call
-/// - Test in FastMP to verify deterministic action execution
 /// </summary>
 public static class ActionQueueSynchronizer
 {
@@ -51,72 +39,12 @@ public static class ActionQueueSynchronizer
             return;
         }
 
-        // Try common API patterns before falling back to reflection
-        // Pattern 1: Static method on GameAction
-        try
-        {
-            var queueMethod = typeof(GameAction).GetMethod("Queue", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-            if (queueMethod != null)
-            {
-                queueMethod.Invoke(null, new object[] { action });
-                GD.Print($"[SoulLink][VGQ] Successfully enqueued {action.GetType().Name} via GameAction.Queue()");
-                return;
-            }
-        }
-        catch { }
-
-        // Pattern 2: Instance method on RunManager
-        try
-        {
-            var queueMethod = runManager.GetType().GetMethod("Queue", new[] { typeof(GameAction) });
-            if (queueMethod != null)
-            {
-                queueMethod.Invoke(runManager, new object[] { action });
-                GD.Print($"[SoulLink][VGQ] Successfully enqueued {action.GetType().Name} via runManager.Queue()");
-                return;
-            }
-        }
-        catch { }
-
-        // TEMPORARY: Use reflection to discover the correct queueing method
-        // Discovery of RunManager API surface for queueing actions
-        var runManagerType = runManager.GetType();
-
-        // Log all public methods that might be related to queueing/actions
-        var methods = runManagerType.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-            .Where(m => m.Name.Contains("Queue") || m.Name.Contains("Action") || m.Name.Contains("Enqueue") || m.Name.Contains("Add"))
-            .ToList();
-
-        if (methods.Count > 0)
-        {
-            GD.Print($"[SoulLink][VGQ] Found {methods.Count} potential queueing methods on RunManager:");
-            foreach (var method in methods)
-            {
-                var parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
-                GD.Print($"[SoulLink][VGQ]   - {method.ReturnType.Name} {method.Name}({parameters})");
-            }
-        }
-        else
-        {
-            GD.PrintErr("[SoulLink][VGQ] No methods found matching Queue/Action/Enqueue/Add pattern on RunManager");
-
-            // Log all public properties that might give access to an action queue
-            var properties = runManagerType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-                .Where(p => p.Name.Contains("Queue") || p.Name.Contains("Action"))
-                .ToList();
-
-            if (properties.Count > 0)
-            {
-                GD.Print($"[SoulLink][VGQ] Found {properties.Count} potential action queue properties:");
-                foreach (var prop in properties)
-                {
-                    GD.Print($"[SoulLink][VGQ]   - {prop.PropertyType.Name} {prop.Name}");
-                }
-            }
-        }
-
-        GD.PrintErr($"[SoulLink][VGQ] Cannot enqueue {action.GetType().Name} - queueing method not yet discovered");
-        return;
+        // Use the vanilla game's ActionQueueSynchronizer to enqueue our custom GameAction.
+        // The game's ActionQueueSynchronizer.RequestEnqueue handles:
+        // - Multiplayer synchronization (broadcasts to all clients)
+        // - Deterministic action ID assignment
+        // - Queue ordering guarantees
+        runManager.ActionQueueSynchronizer.RequestEnqueue(action);
 
         GD.Print($"[SoulLink][VGQ] Enqueued {action.GetType().Name} to vanilla action queue");
     }
