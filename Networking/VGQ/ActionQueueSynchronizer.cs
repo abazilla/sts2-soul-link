@@ -116,9 +116,6 @@ public static class ActionQueueSynchronizer
         }
 
         GD.PrintErr($"[SoulLink][VGQ] Cannot enqueue {action.GetType().Name} - queueing method not yet discovered");
-        return;
-
-        GD.Print($"[SoulLink][VGQ] Enqueued {action.GetType().Name} to vanilla action queue");
     }
 
     /// <summary>
