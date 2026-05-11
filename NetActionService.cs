@@ -4,12 +4,14 @@ using Godot;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Actions;
+using SoulLinkMod.Messages;
 
 namespace SoulLinkMod;
 
 /// <summary>
 /// Service for managing INetAction sending and receiving.
-/// Actions are serialized as custom network messages and dispatched through
+/// Actions are serialized as concrete network messages and dispatched through
 /// the standard message handler infrastructure.
 /// </summary>
 public static class NetActionService
@@ -18,6 +20,7 @@ public static class NetActionService
     private static readonly LinkedList<(INetAction action, INetActionContext context)> _history = new();
     private const int HistoryCapacity = 100;
     private static bool _executingAction;
+    private static readonly Queue<Action> _pendingMessages = new();
 
     internal static void RegisterActionHandler<T>(Action<T, ulong> handler) where T : struct, INetAction
     {
@@ -42,22 +45,80 @@ public static class NetActionService
         var context = NetActionContext.CreateLocal(playerSlot);
         ExecuteAction(action, context, isLocal: true);
 
-        // Broadcast to other peers
-        if (action.ShouldBroadcast)
+        if (!action.ShouldBroadcast)
+            return;
+
+        var netService = RunManager.Instance?.NetService;
+        if (netService == null)
+            return;
+
+        switch (action)
         {
-            RunManager.Instance?.NetService?.SendMessage(new NetActionMessage<T>
-            {
-                Action = action,
-                Timestamp = context.Timestamp,
-                PlayerSlot = playerSlot,
-            });
+            case HpChangeAction hp:
+                netService.SendMessage(new HpChangeSyncMessage
+                {
+                    DeltaHp = hp.DeltaHp,
+                    PlayerSlot = hp.PlayerSlot,
+                    InCombat = hp.InCombat,
+                    Source = hp.Source,
+                    Timestamp = context.Timestamp,
+                });
+                break;
+
+            case MaxHpChangeAction maxHp:
+                netService.SendMessage(new MaxHpChangeSyncMessage
+                {
+                    DeltaMaxHp = maxHp.DeltaMaxHp,
+                    PlayerSlot = maxHp.PlayerSlot,
+                    InCombat = maxHp.InCombat,
+                    Source = maxHp.Source,
+                    Timestamp = context.Timestamp,
+                });
+                break;
+
+            case GoldChangeAction gold:
+                netService.SendMessage(new GoldChangeSyncMessage
+                {
+                    DeltaGold = gold.DeltaGold,
+                    PlayerSlot = gold.PlayerSlot,
+                    Source = gold.Source,
+                    WasBlocked = gold.WasBlocked,
+                    Timestamp = context.Timestamp,
+                });
+                break;
+
+            default:
+                GD.PrintErr($"[NetActionService] Unknown action type: {typeof(T).Name}. Cannot broadcast.");
+                break;
         }
     }
 
     internal static void ExecuteRemoteAction<T>(T action, long timestamp, int playerSlot) where T : struct, INetAction
     {
+        // If an action is currently executing, queue this message to prevent parallel state modification
+        if (_executingAction)
+        {
+            _pendingMessages.Enqueue(() => ExecuteRemoteAction(action, timestamp, playerSlot));
+            GD.Print($"[NetActionService] Queued {typeof(T).Name} during action execution (queue size: {_pendingMessages.Count})");
+            return;
+        }
+
         var context = NetActionContext.CreateRemote(playerSlot, timestamp);
         ExecuteAction(action, context, isLocal: false);
+    }
+
+    private static void DrainPendingMessages()
+    {
+        if (_pendingMessages.Count == 0)
+            return;
+
+        GD.Print($"[NetActionService] Draining {_pendingMessages.Count} queued messages");
+
+        while (_pendingMessages.Count > 0)
+        {
+            var messageHandler = _pendingMessages.Dequeue();
+            messageHandler();
+        }
     }
 
     private static void ExecuteAction<T>(T action, INetActionContext context, bool isLocal) where T : struct, INetAction
@@ -88,10 +149,12 @@ public static class NetActionService
         catch (Exception ex)
         {
             GD.PrintErr($"[NetActionService] Error executing {typeof(T).Name}: {ex}");
+            DumpHistory($"Exception in {typeof(T).Name}");
         }
         finally
         {
             _executingAction = false;
+            DrainPendingMessages();
         }
     }
 
@@ -104,10 +167,37 @@ public static class NetActionService
 
     public static IEnumerable<(INetAction action, INetActionContext context)> GetHistory() => _history;
 
+    public static void DumpHistory(string reason)
+    {
+        GD.PrintErr($"[SoulLink][HISTORY DUMP] Reason: {reason}");
+        GD.PrintErr($"[SoulLink][HISTORY DUMP] {_history.Count} actions:");
+        int i = 0;
+        foreach (var (action, ctx) in _history)
+        {
+            string type = action.GetType().Name;
+            string local = ctx.IsLocal ? "LOCAL" : "REMOTE";
+            string slot = $"slot={ctx.OriginatingPlayerSlot}";
+
+            string details = action switch
+            {
+                HpChangeAction hp => $"delta={hp.DeltaHp} inCombat={hp.InCombat} src={hp.Source}",
+                MaxHpChangeAction mhp => $"delta={mhp.DeltaMaxHp} inCombat={mhp.InCombat} src={mhp.Source}",
+                GoldChangeAction g => $"delta={g.DeltaGold} blocked={g.WasBlocked} src={g.Source}",
+                _ => action.ToString() ?? type
+            };
+
+            GD.PrintErr($"  [{i++}] {type} {local} {slot}: {details}");
+        }
+    }
+
     internal static void Reset()
     {
+        if (_history.Count > 0)
+            DumpHistory("Session reset (likely disconnect)");
         _history.Clear();
         _executingAction = false;
+        _pendingMessages.Clear();
+        SyncCoordinator.Reset();
         GD.Print("[NetActionService] Reset");
     }
 }

@@ -36,6 +36,7 @@ public static class SoulLinkMod
 
         // Initialize feature flag system
         FeatureFlagManager.Initialize();
+        FeatureFlagManager.SetFlag(FeatureFlag.NetworkedActions, true); // default to enabled for testing
 
         try
         {

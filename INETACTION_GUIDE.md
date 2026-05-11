@@ -26,12 +26,14 @@ The feature flag system (`FeatureFlagManager`) allows runtime enabling/disabling
 1. **INetAction.cs** - Core action contract and context interface
 2. **NetActionContext.cs** - Default implementation of action execution context
 3. **NetActionService.cs** - Service for sending/receiving actions
-4. **NetActionMessage.cs** - Generic wrapper for transporting actions
-5. **FeatureFlags.cs** - Enum of available feature flags and scopes
-6. **FeatureFlagManager.cs** - Manager for checking and setting flags
-7. **Actions/GoldChangeAction.cs** - Gold sync via INetAction
-8. **Actions/HpChangeAction.cs** - HP sync via INetAction
-9. **Actions/MaxHpChangeAction.cs** - MaxHP sync via INetAction
+4. **Messages/HpChangeSyncMessage.cs** - Concrete message type for HP sync
+5. **Messages/MaxHpChangeSyncMessage.cs** - Concrete message type for MaxHP sync
+6. **Messages/GoldChangeSyncMessage.cs** - Concrete message type for gold sync
+7. **FeatureFlags.cs** - Enum of available feature flags and scopes
+8. **FeatureFlagManager.cs** - Manager for checking and setting flags
+9. **Actions/GoldChangeAction.cs** - Gold sync via INetAction
+10. **Actions/HpChangeAction.cs** - HP sync via INetAction
+11. **Actions/MaxHpChangeAction.cs** - MaxHP sync via INetAction
 
 ### Current State
 
@@ -102,6 +104,58 @@ NetActionService.EnqueueLocalAction(new MyCustomAction
     SomeText = "Hello"
 }, playerSlot);
 ```
+
+## Action Execution Model
+
+### Serialized Execution (State Divergence Prevention)
+
+`NetActionService` prevents parallel state modification by queuing remote actions that arrive during local action execution:
+
+1. **Local action starts**: `_executingAction = true`
+2. **Remote message arrives**: Checked by `ExecuteRemoteAction()`
+   - If `_executingAction == false`: Execute immediately (current behavior)
+   - If `_executingAction == true`: Queue to `_pendingMessages`
+3. **Local action completes**: `_executingAction = false`, drain queue
+4. **Queue drains**: Queued remote actions execute in order
+
+**Why this matters:**
+- Prevents checksum divergence from mid-action state changes
+- Preserves message ordering relative to local action lifecycle
+- Ensures canonical state updates complete atomically
+
+**Log signature:**
+```
+[NetActionService] Queued HpChangeAction during action execution (queue size: 1)
+[NetActionService] Draining 1 queued messages
+```
+
+### Transient State Re-evaluation
+
+Actions carrying transient state flags (e.g., `InCombat`) re-evaluate on receive to avoid stale data:
+
+```csharp
+// HpChangeAction.Execute() - remote path
+bool actualInCombat = CombatManager.Instance?.IsInProgress ?? false;
+
+if (actualInCombat != InCombat)
+{
+    GD.Print($"InCombat flag mismatch: message={InCombat}, actual={actualInCombat}. Using actual.");
+}
+
+// Apply delta using CURRENT state, not stale message flag
+int canonical = SoulLinkSession.ApplyHpDelta(DeltaHp, actualInCombat, ...);
+```
+
+**Why this matters:**
+- Combat-end relics (Burning Blood) fire when `IsInProgress` may have already flipped
+- Network latency means message-time state ≠ receive-time state
+- Different scaling rules apply in/out of combat → divergence if flag is wrong
+
+**Common divergence scenario:**
+1. Combat ends, peer A's Burning Blood fires with `InCombat=false` (scales heal by 1/playerCount)
+2. Message sent with `InCombat=false`
+3. Peer B receives message while `IsInProgress=true` (hasn't transitioned yet)
+4. Without re-eval: peer B applies wrong scaling → state divergence
 
 ## Using Feature Flags
 
@@ -176,6 +230,19 @@ The feature flag system allows gradual migration from legacy sync to INetAction-
 4. **Logged**: Include context for debugging desyncs
 5. **Serializable**: Use typed PacketWriter/Reader APIs
 6. **Ordered**: Execute in FIFO queue order for state consistency
+7. **Concrete messages**: Each action has a dedicated `*SyncMessage` type (no generic wrappers)
+8. **Serialized execution**: Remote actions queue during local action execution to prevent parallel state modification
+9. **Current state validation**: Actions re-evaluate transient flags (e.g., InCombat) on receive to avoid stale data causing divergence
+
+## Why Concrete Message Types
+
+STS2's `MessageTypes` system uses `ReflectionHelper.GetSubtypesInMods<INetMessage>()` to discover message types at startup. This reflection finds concrete types but NOT closed generic instantiations (e.g. `NetActionMessage<HpChangeAction>`).
+
+Using concrete message types like `HpChangeSyncMessage` instead of `NetActionMessage<T>`:
+- Auto-discovered by STS2's reflection scanner
+- Cleaner error messages (shows real type name)
+- Matches STS2 base game patterns (e.g. `GoldLostMessage`, `CardRemovedMessage`)
+- Easier to debug and test
 
 ## References
 

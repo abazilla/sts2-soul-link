@@ -39,48 +39,53 @@ namespace SoulLinkMod.Patches;
 [HarmonyPatch(typeof(Player))]
 public static class GoldSyncPatch
 {
-    // Tracks (playerSlot, delta) pairs for gold changes applied deterministically
-    // from a remote player's setter in SharedPool mode.  When the peer's broadcast
-    // arrives in GoldSyncHandler, the matching entry is consumed and the message
-    // is skipped — preventing a double-apply of the same enemy-initiated change.
-    // (Handles: remote setter fires BEFORE GoldSyncHandler receives the broadcast.)
-    private static readonly Queue<(int slot, int delta)> _pendingCancellations = new();
+    // Bidirectional dedup for gold changes. Handles both orderings:
+    //   1. Local fires first → message arrives: _pendingCancellations
+    //   2. Message arrives first → local fires: _networkApplied
+
+    // Direction 1: Local event fires before network message arrives
+    private static readonly Dictionary<(int slot, int delta), int> _pendingCancellations = new();
+
+    // Direction 2: Network message arrives before local event fires
+    // Uses slot-only matching because GoldSyncHandler updates player.Gold before the
+    // setter fires, so the computed delta may differ from the original message delta.
+    private static readonly Dictionary<int, int> _networkApplied = new();
 
     internal static bool TryConsumeCancellation(int slot, int delta)
     {
-        if (_pendingCancellations.Count == 0) return false;
-        var (s, d) = _pendingCancellations.Peek();
-        if (s != slot || d != delta) return false;
-        _pendingCancellations.Dequeue();
+        var key = (slot, delta);
+        if (!_pendingCancellations.TryGetValue(key, out var count) || count == 0)
+            return false;
+        if (count == 1)
+            _pendingCancellations.Remove(key);
+        else
+            _pendingCancellations[key] = count - 1;
         return true;
     }
 
-    // Tracks playerSlot values for gold changes already applied by GoldSyncHandler
-    // from a network broadcast.  When the remote player's setter fires afterward (because
-    // the game executes OptionIndexChosenMessage after the network message arrived), the
-    // matching slot is consumed and the setter is redirected to the already-applied
-    // canonical — preventing a double-apply.
-    // (Handles: GoldSyncHandler fires BEFORE the remote setter fires.)
-    //
-    // We match on slot only (not delta) because GoldSyncHandler updates player.Gold to the
-    // new canonical before the setter fires.  When the game's GoldLostMessage then fires the
-    // setter, it sees the already-updated curGold and computes a different remDelta (e.g. the
-    // gold is lower than the original purchase cost after clamping), so an exact delta match
-    // would fail and cause a double-apply.  Slot-only matching is safe because merchant
-    // purchases (the source of these entries) never overlap with in-band deterministic
-    // gold changes like enemy steals (which happen in combat, a different game state).
-    private static readonly Queue<int> _networkApplied = new();
+    internal static void EnqueueCancellation(int slot, int delta)
+    {
+        var key = (slot, delta);
+        _pendingCancellations.TryGetValue(key, out var count);
+        _pendingCancellations[key] = count + 1;
+    }
 
     internal static bool TryConsumeNetworkApplied(int slot)
     {
-        if (_networkApplied.Count == 0) return false;
-        if (_networkApplied.Peek() != slot) return false;
-        _networkApplied.Dequeue();
+        if (!_networkApplied.TryGetValue(slot, out var count) || count == 0)
+            return false;
+        if (count == 1)
+            _networkApplied.Remove(slot);
+        else
+            _networkApplied[slot] = count - 1;
         return true;
     }
 
-    internal static void EnqueueNetworkApplied(int slot) =>
-        _networkApplied.Enqueue(slot);
+    internal static void EnqueueNetworkApplied(int slot)
+    {
+        _networkApplied.TryGetValue(slot, out var count);
+        _networkApplied[slot] = count + 1;
+    }
 
     internal static void ClearCancellations()
     {
@@ -197,7 +202,7 @@ public static class GoldSyncPatch
 
                 // Enqueue for cancellation so GoldSyncHandler ignores the peer's broadcast.
                 if (!remBlocked)
-                    _pendingCancellations.Enqueue((playerSlot, remDelta));
+                    EnqueueCancellation(playerSlot, remDelta);
 
                 CombatLogPanel.Current?.Refresh();
                 RunStatsPanel.Current?.Refresh();

@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.Actions;
+using SoulLinkMod.Messages;
 using SoulLinkMod.UI;
 
 namespace SoulLinkMod.Patches;
@@ -111,7 +112,7 @@ internal static class GoldChangeActionHandler
         var net = RunManager.Instance?.NetService;
         if (net == null) return;
         if (_registered && ReferenceEquals(_registeredNet, net)) return;
-        net.RegisterMessageHandler<NetActionMessage<GoldChangeAction>>(Handle);
+        net.RegisterMessageHandler<GoldChangeSyncMessage>(Handle);
         _registered = true;
         _registeredNet = net;
         GD.Print("[SoulLink] GoldChangeActionHandler registered.");
@@ -120,12 +121,12 @@ internal static class GoldChangeActionHandler
     internal static void TryUnregister()
     {
         if (!_registered) return;
-        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<GoldChangeAction>>(Handle);
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<GoldChangeSyncMessage>(Handle);
         _registered = false;
         _registeredNet = null;
     }
 
-    internal static void Handle(NetActionMessage<GoldChangeAction> message, ulong senderId)
+    internal static void Handle(GoldChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
 
@@ -136,20 +137,27 @@ internal static class GoldChangeActionHandler
         // Check if this delta was already applied by a deterministic local setter (before the remote
         // action arrived). If so, skip to avoid double-apply.
         if (goldMode == GoldSharingMode.SharedPool &&
-            message.Action.DeltaGold != 0 &&
-            GoldSyncPatch.TryConsumeCancellation(message.Action.PlayerSlot, message.Action.DeltaGold))
+            message.DeltaGold != 0 &&
+            GoldSyncPatch.TryConsumeCancellation(message.PlayerSlot, message.DeltaGold))
         {
-            GD.Print($"[SoulLink][GoldChangeAction] Consumed cancellation for slot={message.Action.PlayerSlot} delta={message.Action.DeltaGold}");
+            GD.Print($"[SoulLink][GoldChangeAction] Consumed cancellation for slot={message.PlayerSlot} delta={message.DeltaGold}");
             return;
         }
 
         // Mark this action as applied so the setter (if it fires after this handler) can recognize it.
-        if (goldMode == GoldSharingMode.SharedPool && message.Action.DeltaGold != 0)
+        if (goldMode == GoldSharingMode.SharedPool && message.DeltaGold != 0)
         {
-            GoldSyncPatch.EnqueueNetworkApplied(message.Action.PlayerSlot);
+            GoldSyncPatch.EnqueueNetworkApplied(message.PlayerSlot);
         }
 
-        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
+        var action = new GoldChangeAction
+        {
+            DeltaGold = message.DeltaGold,
+            PlayerSlot = message.PlayerSlot,
+            Source = message.Source,
+            WasBlocked = message.WasBlocked,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
     }
 }
 
@@ -163,7 +171,7 @@ internal static class HpChangeActionHandler
         var net = RunManager.Instance?.NetService;
         if (net == null) return;
         if (_registered && ReferenceEquals(_registeredNet, net)) return;
-        net.RegisterMessageHandler<NetActionMessage<HpChangeAction>>(Handle);
+        net.RegisterMessageHandler<HpChangeSyncMessage>(Handle);
         _registered = true;
         _registeredNet = net;
         GD.Print("[SoulLink] HpChangeActionHandler registered.");
@@ -172,15 +180,33 @@ internal static class HpChangeActionHandler
     internal static void TryUnregister()
     {
         if (!_registered) return;
-        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<HpChangeAction>>(Handle);
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<HpChangeSyncMessage>(Handle);
         _registered = false;
         _registeredNet = null;
     }
 
-    internal static void Handle(NetActionMessage<HpChangeAction> message, ulong senderId)
+    internal static void Handle(HpChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
-        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
+
+        // Skip during init phase (Neow) - it's deterministic, already processed locally.
+        if (!SoulLinkSession.IsInitPhaseComplete)
+        {
+            GD.Print($"[SoulLink][HpHandler] Skipping during init phase: slot={message.PlayerSlot} delta={message.DeltaHp}");
+            return;
+        }
+
+        GD.Print($"[SoulLink][HpHandler] Received: slot={message.PlayerSlot} delta={message.DeltaHp}");
+
+        // Dedup is handled atomically inside HpChangeAction.Execute() via SyncCoordinator.
+        var action = new HpChangeAction
+        {
+            DeltaHp = message.DeltaHp,
+            PlayerSlot = message.PlayerSlot,
+            InCombat = message.InCombat,
+            Source = message.Source,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
     }
 }
 
@@ -194,7 +220,7 @@ internal static class MaxHpChangeActionHandler
         var net = RunManager.Instance?.NetService;
         if (net == null) return;
         if (_registered && ReferenceEquals(_registeredNet, net)) return;
-        net.RegisterMessageHandler<NetActionMessage<MaxHpChangeAction>>(Handle);
+        net.RegisterMessageHandler<MaxHpChangeSyncMessage>(Handle);
         _registered = true;
         _registeredNet = net;
         GD.Print("[SoulLink] MaxHpChangeActionHandler registered.");
@@ -203,15 +229,33 @@ internal static class MaxHpChangeActionHandler
     internal static void TryUnregister()
     {
         if (!_registered) return;
-        RunManager.Instance?.NetService?.UnregisterMessageHandler<NetActionMessage<MaxHpChangeAction>>(Handle);
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<MaxHpChangeSyncMessage>(Handle);
         _registered = false;
         _registeredNet = null;
     }
 
-    internal static void Handle(NetActionMessage<MaxHpChangeAction> message, ulong senderId)
+    internal static void Handle(MaxHpChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
-        NetActionService.ExecuteRemoteAction(message.Action, message.Timestamp, message.Action.PlayerSlot);
+
+        // Skip during init phase (Neow) - it's deterministic, already processed locally.
+        if (!SoulLinkSession.IsInitPhaseComplete)
+        {
+            GD.Print($"[SoulLink][MaxHpHandler] Skipping during init phase: slot={message.PlayerSlot} delta={message.DeltaMaxHp}");
+            return;
+        }
+
+        GD.Print($"[SoulLink][MaxHpHandler] Received: slot={message.PlayerSlot} delta={message.DeltaMaxHp}");
+
+        // Dedup is handled atomically inside MaxHpChangeAction.Execute() via SyncCoordinator.
+        var action = new MaxHpChangeAction
+        {
+            DeltaMaxHp = message.DeltaMaxHp,
+            PlayerSlot = message.PlayerSlot,
+            InCombat = message.InCombat,
+            Source = message.Source,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
     }
 }
 

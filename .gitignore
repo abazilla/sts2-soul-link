@@ -4,6 +4,7 @@ obj/
 issues/
 node_modules/
 .claude/
+.cursor/
 scripts/
 
 Local.props

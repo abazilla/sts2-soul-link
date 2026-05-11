@@ -75,6 +75,12 @@ public static class SoulLinkSession
     // After the first combat, campfire/event heals fire once per player, so scaling applies.
     private static bool _initPhaseComplete;
 
+    /// <summary>
+    /// True once the first combat has started. Used to skip network sync during Neow
+    /// (which is deterministic and doesn't need sync).
+    /// </summary>
+    public static bool IsInitPhaseComplete => _initPhaseComplete;
+
     // HealInternal receives the unclamped heal amount before SetCurrentHpInternal clamps it
     // to MaxHp. We stash it here so ApplyHpDelta can scale the true intended heal rather
     // than the already-clamped delta that arrives via the CurrentHp setter.

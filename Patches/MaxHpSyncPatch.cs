@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.Actions;
@@ -14,10 +15,14 @@ namespace SoulLinkMod.Patches;
 /// Out-of-combat max-HP gains are divided by player count (same scaling rule as heals).
 /// Writes the canonical MaxHp (and possibly-clamped CurrentHp) back to all players
 /// via CreatureHelper reflection, since the setters are private.
+///
+/// Dedup dictionaries and lock are owned by SyncCoordinator.
 /// </summary>
 [HarmonyPatch(typeof(Creature))]
 public static class MaxHpSyncPatch
 {
+    internal static int DebugGetQueueSize() => 0;
+
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Creature), nameof(Creature.MaxHp));
 
@@ -43,6 +48,9 @@ public static class MaxHpSyncPatch
         int delta = value - __instance.MaxHp;
         if (delta == 0) return;
 
+        bool isLocalPlayer = LocalContext.IsMe(runState.Players[playerSlot]);
+        Godot.GD.Print($"[SoulLink][MaxHpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.MaxHp}");
+
         bool inCombat = CombatManager.Instance.IsInProgress;
         int playerCount = runState.Players.Count;
 
@@ -50,7 +58,15 @@ public static class MaxHpSyncPatch
             ?? SoulLinkSession.CurrentRoomSource
             ?? (inCombat ? "Combat" : "Out of combat");
         SoulLinkSession.PendingSource = null;
-        SoulLinkSession.ApplyMaxHpDelta(delta, inCombat, playerCount, playerSlot, source);
+
+        // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup)
+        bool applied = SyncCoordinator.TryApplyMaxHpDelta(playerSlot, delta, isFromNetwork: false, inCombat, playerCount, source);
+        if (!applied)
+        {
+            // Already applied by network path - redirect to canonical to prevent stale write
+            value = SyncCoordinator.GetCanonicalMaxHp();
+            return;
+        }
 
         // Redirect the write on the triggering player.
         value = SoulLinkSession.MaxHp;
@@ -77,15 +93,23 @@ public static class MaxHpSyncPatch
         }
 
         // Broadcast the MaxHP change.
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        // Skip during init phase (Neow) and combat - both are deterministic.
+        // Combat: game syncs card plays, each client processes independently.
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
+            && SoulLinkSession.IsInitPhaseComplete
+            && !inCombat)
         {
-            NetActionService.EnqueueLocalAction(new MaxHpChangeAction
+            if (isLocalPlayer)
             {
-                DeltaMaxHp = delta,
-                PlayerSlot = playerSlot,
-                InCombat = inCombat,
-                Source = source,
-            }, playerSlot);
+                // Local player action - broadcast to peers (out-of-combat only)
+                NetActionService.EnqueueLocalAction(new MaxHpChangeAction
+                {
+                    DeltaMaxHp = delta,
+                    PlayerSlot = playerSlot,
+                    InCombat = inCombat,
+                    Source = source,
+                }, playerSlot);
+            }
         }
 
         CombatLogPanel.Current?.Refresh();

@@ -50,6 +50,13 @@ public struct HpChangeAction : INetAction
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.SharedHealthPool))
             return;
 
+        // On the local machine, the HpSyncPatch already applied the delta via SyncCoordinator.
+        if (context.IsLocal)
+        {
+            GD.Print($"[SoulLink][HpChangeAction] Skipping local execution (already applied by patch)");
+            return;
+        }
+
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
@@ -65,30 +72,25 @@ public struct HpChangeAction : INetAction
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string combatStr = InCombat ? " [IN COMBAT]" : "";
-        GD.Print($"[SoulLink][HpChangeAction] Execute: player={PlayerSlot} delta={DeltaHp}{sourceStr}{combatStr} isLocal={context.IsLocal}");
-
-        // On the local machine, the HpSyncPatch already applied the delta.
-        // Only remote machines need to apply the delta through this action.
-        if (context.IsLocal)
-        {
-            GD.Print($"[SoulLink][HpChangeAction] Skipping local execution (already applied by patch)");
-            return;
-        }
+        GD.Print($"[SoulLink][HpAction.Execute] slot={PlayerSlot} delta={DeltaHp} isLocal={context.IsLocal} poolBefore={SoulLinkSession.CurrentHp}{sourceStr}{combatStr}");
 
         int playerCount = runState.Players.Count;
 
+        // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup).
+        // Returns null if the local deterministic patch already applied this change.
+        int? result = SyncCoordinator.TryApplyHpDelta(PlayerSlot, DeltaHp, isFromNetwork: true, InCombat, playerCount, Source);
+        if (result == null)
+        {
+            GD.Print($"[SoulLink][HpChangeAction] Skipping: already applied by local deterministic event");
+            return;
+        }
+
+        // Write canonical to all creatures
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
-            int canonical = SoulLinkSession.ApplyHpDelta(DeltaHp, InCombat, playerCount, PlayerSlot, Source);
-
-            for (int i = 0; i < runState.Players.Count; i++)
-            {
-                if (i != PlayerSlot)
-                {
-                    runState.Players[i].Creature.SetCurrentHp(canonical);
-                }
-            }
+            foreach (var player in runState.Players)
+                player.Creature.SetCurrentHp(result.Value);
         }
         finally
         {

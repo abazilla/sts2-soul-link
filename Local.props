@@ -1,5 +1,5 @@
 <Project>
   <PropertyGroup>
-    <STS2GameDir>/game/sts2</STS2GameDir>
+    <STS2GameDir>/mnt/w/SteamLibrary/steamapps/common/Slay the Spire 2</STS2GameDir>
   </PropertyGroup>
 </Project>

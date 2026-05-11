@@ -50,6 +50,13 @@ public struct MaxHpChangeAction : INetAction
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.SharedHealthPool))
             return;
 
+        // On the local machine, the MaxHpSyncPatch already applied the delta via SyncCoordinator.
+        if (context.IsLocal)
+        {
+            GD.Print($"[SoulLink][MaxHpChangeAction] Skipping local execution (already applied by patch)");
+            return;
+        }
+
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
@@ -67,28 +74,25 @@ public struct MaxHpChangeAction : INetAction
         string combatStr = InCombat ? " [IN COMBAT]" : "";
         GD.Print($"[SoulLink][MaxHpChangeAction] Execute: player={PlayerSlot} delta={DeltaMaxHp}{sourceStr}{combatStr} isLocal={context.IsLocal}");
 
-        // On the local machine, the MaxHpSyncPatch already applied the delta.
-        // Only remote machines need to apply the delta through this action.
-        if (context.IsLocal)
+        int playerCount = runState.Players.Count;
+
+        // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup).
+        // Returns false if the local deterministic patch already applied this change.
+        bool applied = SyncCoordinator.TryApplyMaxHpDelta(PlayerSlot, DeltaMaxHp, isFromNetwork: true, InCombat, playerCount, Source);
+        if (!applied)
         {
-            GD.Print($"[SoulLink][MaxHpChangeAction] Skipping local execution (already applied by patch)");
+            GD.Print($"[SoulLink][MaxHpChangeAction] Skipping: already applied by local deterministic event");
             return;
         }
 
-        int playerCount = runState.Players.Count;
-
+        // Write canonical to all creatures
         SoulLinkMod.ApplyingCanonical = true;
         try
         {
-            SoulLinkSession.ApplyMaxHpDelta(DeltaMaxHp, InCombat, playerCount, PlayerSlot, Source);
-
-            for (int i = 0; i < runState.Players.Count; i++)
+            foreach (var player in runState.Players)
             {
-                if (i != PlayerSlot)
-                {
-                    runState.Players[i].Creature.SetMaxHp(SoulLinkSession.MaxHp);
-                    runState.Players[i].Creature.SetCurrentHp(SoulLinkSession.CurrentHp);
-                }
+                player.Creature.SetMaxHp(SoulLinkSession.MaxHp);
+                player.Creature.SetCurrentHp(SoulLinkSession.CurrentHp);
             }
         }
         finally

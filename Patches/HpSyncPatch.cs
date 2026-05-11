@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.Actions;
@@ -13,15 +14,18 @@ namespace SoulLinkMod.Patches;
 ///
 /// When a player's HP is written:
 ///  1. Calculate the delta.
-///  2. Pass it to SoulLinkSession to update the shared pool (with out-of-combat scaling).
+///  2. Pass it to SyncCoordinator to atomically check-apply-mark (thread-safe dedup).
 ///  3. Overwrite `value` with the canonical shared HP so the triggering player lands on it.
 ///  4. Write the canonical value back to every other player via CreatureHelper (reflection).
 ///
 /// The ApplyingCanonical guard prevents re-entrancy when writing back.
+/// Dedup dictionaries and lock are owned by SyncCoordinator.
 /// </summary>
 [HarmonyPatch(typeof(Creature))]
 public static class HpSyncPatch
 {
+    internal static int DebugGetQueueSize() => 0;
+
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Creature), nameof(Creature.CurrentHp));
 
@@ -47,6 +51,9 @@ public static class HpSyncPatch
         int delta = value - __instance.CurrentHp;
         if (delta == 0) return;
 
+        bool isLocalPlayer = LocalContext.IsMe(runState.Players[playerSlot]);
+        Godot.GD.Print($"[SoulLink][HpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.CurrentHp}");
+
         bool inCombat = CombatManager.Instance.IsInProgress;
         int playerCount = runState.Players.Count;
 
@@ -54,10 +61,18 @@ public static class HpSyncPatch
             ?? SoulLinkSession.CurrentRoomSource
             ?? (inCombat ? "Combat" : "Out of combat");
         SoulLinkSession.PendingSource = null;
-        int canonical = SoulLinkSession.ApplyHpDelta(delta, inCombat, playerCount, playerSlot, source);
+
+        // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup)
+        int? result = SyncCoordinator.TryApplyHpDelta(playerSlot, delta, isFromNetwork: false, inCombat, playerCount, source);
+        if (result == null)
+        {
+            // Already applied by network path - redirect to canonical to prevent stale write
+            value = SyncCoordinator.GetCanonicalHp();
+            return;
+        }
 
         // Redirect the write on the triggering player.
-        value = canonical;
+        value = result.Value;
 
         // Write canonical to all other players.
         SoulLinkMod.ApplyingCanonical = true;
@@ -66,7 +81,7 @@ public static class HpSyncPatch
             foreach (var player in runState.Players)
             {
                 if (player.Creature != __instance)
-                    player.Creature.SetCurrentHp(canonical);
+                    player.Creature.SetCurrentHp(result.Value);
             }
         }
         finally
@@ -75,15 +90,24 @@ public static class HpSyncPatch
         }
 
         // Broadcast the HP change.
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        // Skip during init phase (Neow) and combat - both are deterministic.
+        // Combat: game syncs card plays, each client processes independently.
+        // Broadcasting during combat causes race with relics like Rupture.
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
+            && SoulLinkSession.IsInitPhaseComplete
+            && !inCombat)
         {
-            NetActionService.EnqueueLocalAction(new HpChangeAction
+            if (isLocalPlayer)
             {
-                DeltaHp = delta,
-                PlayerSlot = playerSlot,
-                InCombat = inCombat,
-                Source = source,
-            }, playerSlot);
+                // Local player action - broadcast to peers (out-of-combat only)
+                NetActionService.EnqueueLocalAction(new HpChangeAction
+                {
+                    DeltaHp = delta,
+                    PlayerSlot = playerSlot,
+                    InCombat = inCombat,
+                    Source = source,
+                }, playerSlot);
+            }
         }
 
         CombatLogPanel.Current?.Refresh();
