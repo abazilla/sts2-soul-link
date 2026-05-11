@@ -7,7 +7,7 @@ namespace SoulLinkMod.VGQ;
 /// <summary>
 /// Facade for enqueueing VGQ (Vanilla GameAction Queue) actions.
 ///
-/// PROTOTYPE STATUS: Commented out until GameAction types are resolved.
+/// PROTOTYPE STATUS: Commented out until RunManager.QueueGameAction API is located.
 ///
 /// This provides a thin API layer for patches to enqueue Soul Link actions
 /// into the vanilla action queue without needing to know queue internals.
@@ -16,7 +16,6 @@ namespace SoulLinkMod.VGQ;
 ///   ActionQueueSynchronizer.RequestEnqueue(new SoulLinkHpChangeGameAction(...));
 ///
 /// BLOCKERS:
-/// - SoulLinkHpChangeGameAction currently commented out due to type resolution issues
 /// - RunManager.QueueGameAction() method location unknown (method not found)
 /// </summary>
 /*

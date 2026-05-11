@@ -94,8 +94,8 @@ public static class HpSyncPatch
         // Broadcasting during combat causes race with relics like Rupture.
 
         // VGQ path: Use vanilla GameAction queue for synchronization
-        // NOTE: VGQ implementation currently blocked on type resolution (see VGQ/SoulLinkHpChangeGameAction.cs)
-        // TODO: Uncomment when SoulLinkHpChangeGameAction and ActionQueueSynchronizer are functional
+        // NOTE: VGQ blocked on ActionQueueSynchronizer (needs RunManager.QueueGameAction method)
+        // TODO: Uncomment when ActionQueueSynchronizer is functional
         // if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
         //     && SoulLinkSession.IsInitPhaseComplete
         //     && !inCombat)
