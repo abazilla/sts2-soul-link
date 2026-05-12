@@ -15,14 +15,25 @@ public static class FeatureFlagManager
 
     private static readonly Dictionary<FeatureFlag, (bool defaultValue, FeatureFlagScope scope)> _defaults = new()
     {
+        // Master kill-switch for the entire mod; when off, hooks stay installed but inert.
         [FeatureFlag.SoulLinkEnabled] = (true, FeatureFlagScope.Global),
+        // Shared HP pool across all players; off falls back to vanilla per-player HP.
         [FeatureFlag.SharedHealthPool] = (true, FeatureFlagScope.Run),
+        // Gold sharing mechanics (shared pool / split-by-player); off uses vanilla gold.
         [FeatureFlag.GoldSharing] = (true, FeatureFlagScope.Run),
-        [FeatureFlag.NetworkedActions] = (false, FeatureFlagScope.Session),
+        // In-game debug overlay panel: sync state, net stats, diagnostics.
         [FeatureFlag.DebugOverlay] = (true, FeatureFlagScope.Session),
+        // Combat log panel: history of HP/gold changes with sources.
         [FeatureFlag.CombatLog] = (true, FeatureFlagScope.Session),
+        // Run stats panel: aggregate stats across all players.
         [FeatureFlag.RunStatsPanel] = (true, FeatureFlagScope.Session),
+        // Verbose multiplayer sync logging; noisy, for desync debugging.
         [FeatureFlag.VerboseNetworkLogging] = (false, FeatureFlagScope.Session),
+
+        // MNA (Mod Net Action) pipeline for deterministic multiplayer actions; legacy path, superseded by VGQ when both enabled.
+        [FeatureFlag.NetworkedActions] = (false, FeatureFlagScope.Session),
+        // VGQ (Vanilla GameAction Queue) sync for HP/MaxHP/Gold; preferred path, takes priority over MNA when both enabled.
+        [FeatureFlag.UseVGQSync] = (true, FeatureFlagScope.Session),
     };
 
     public static bool IsEnabled(FeatureFlag flag)

@@ -29,6 +29,7 @@ public static class CombatRoomReadyPatch
     [HarmonyPostfix]
     static void Postfix(Node __instance)
     {
+        SoulLinkMod.CombatRoomActive = true;
         if (!SoulLinkSession.IsActive) return;
         RoomPanelInjector.AddPanels(__instance);
     }
@@ -46,6 +47,7 @@ public static class CombatRoomExitPatch
     [HarmonyPostfix]
     static void Postfix()
     {
+        SoulLinkMod.CombatRoomActive = false;
         CombatLogPanel.Clear();
         RunStatsPanel.Clear();
         DebugOverlay.Clear();
@@ -125,6 +127,7 @@ internal static class RoomPanelInjector
                 SplitHeal    = rs.SplitHeal,
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
+                HpMode       = (int)rs.HpMode,
             });
             GD.Print("[SoulLink] Re-sent settings sync from host at room entry.");
         }
@@ -136,7 +139,9 @@ internal static class RoomPanelInjector
         // CombatLogPanel — kill-feed style HP/gold log, top-right corner.
         if (ls.ShowCombatLog)
         {
-            var combatLogLayer = new CanvasLayer { Layer = 100 };
+            // Layer kept low so the vanilla dev console (which sits on a higher base-game
+            // CanvasLayer) renders over this panel.
+            var combatLogLayer = new CanvasLayer { Layer = 5 };
             room.AddChild(combatLogLayer);
             var combatLog = new CombatLogPanel();
             combatLogLayer.AddChild(combatLog);
@@ -146,7 +151,10 @@ internal static class RoomPanelInjector
         // RunStatsPanel — cumulative run totals, left side.
         if (ls.ShowRunStats)
         {
-            var statsLayer = new CanvasLayer { Layer = 100 };
+            // Layer kept low so the vanilla dev console (which sits on a higher base-game
+            // CanvasLayer) renders over this panel — the console typing band overlaps
+            // the Run Stats column.
+            var statsLayer = new CanvasLayer { Layer = 5 };
             room.AddChild(statsLayer);
             var stats = new RunStatsPanel();
             statsLayer.AddChild(stats);
@@ -156,7 +164,9 @@ internal static class RoomPanelInjector
         // DebugOverlay — live sync diagnostics, left side.
         if (ls.ShowDebugOverlay)
         {
-            var debugLayer = new CanvasLayer { Layer = 100 };
+            // Layer kept low so the vanilla dev console (which sits on a higher base-game
+            // CanvasLayer) renders over this panel.
+            var debugLayer = new CanvasLayer { Layer = 5 };
             room.AddChild(debugLayer);
             var debug = new DebugOverlay();
             debugLayer.AddChild(debug);

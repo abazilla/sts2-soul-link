@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Godot;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
-using Steamworks;
 
 namespace SoulLinkMod.UI;
 
@@ -30,15 +31,6 @@ public class CombatLogPanel : Control
 
     private bool _expanded = true;
     private Button? _toggleButton;
-
-    // Player slot → color hex (no alpha prefix)
-    private static readonly string[] PlayerColorHex =
-    {
-        "00ffff",   // slot 0 — cyan
-        "ffd900",   // slot 1 — gold/yellow
-        "ff4dff",   // slot 2 — magenta/pink
-        "80ff80",   // slot 3 — light green
-    };
 
     private const string HexDamage    = "ff3333";
     private const string HexHeal      = "33ff4d";
@@ -175,12 +167,30 @@ public class CombatLogPanel : Control
 
     private static List<(string text, string hex)> FormatEntry(LogEntry entry, RunState runState)
     {
-        string playerHex  = PlayerColorHex[Math.Min(entry.PlayerSlot, PlayerColorHex.Length - 1)];
-        string playerName = GetPlayerName(entry.PlayerSlot, runState);
+        int slot = entry.PlayerSlot;
+        Player? player = (slot >= 0 && slot < runState.Players.Count) ? runState.Players[slot] : null;
+        string playerHex  = GetPlayerHex(slot, player);
+        string playerName = GetPlayerName(slot, runState);
 
         return entry.Type == LogEntryType.Health
             ? FormatHealth(playerName, playerHex, entry)
             : FormatGold(playerName, playerHex, entry);
+    }
+
+    // Per-player colour = shade of class MapDrawingColor, varied by slot so two
+    // players sharing a class are still distinguishable.
+    private static string GetPlayerHex(int slot, Player? player)
+    {
+        if (player == null) return "ffffff";
+        Color baseColor = player.Character.MapDrawingColor;
+        Color shaded = slot switch
+        {
+            0 => baseColor,
+            1 => baseColor.Lightened(0.25f),
+            2 => baseColor.Darkened(0.25f),
+            _ => baseColor.Lightened(0.45f),
+        };
+        return shaded.ToHtml(false);
     }
 
     private static List<(string, string)> FormatHealth(string name, string nameHex, LogEntry e)
@@ -251,23 +261,50 @@ public class CombatLogPanel : Control
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private static readonly Dictionary<ulong, string> _nameCache = new();
+    private static readonly HashSet<ulong> _diagLogged = new();
+
     private static string GetPlayerName(int slot, RunState runState)
     {
         if (slot < 0 || slot >= runState.Players.Count)
             return $"P{slot}";
 
         var player = runState.Players[slot];
+        ulong netId = player.NetId;
+
+        if (_nameCache.TryGetValue(netId, out var cached))
+            return cached;
+
+        string resolved = ResolveNameUncached(player, netId, slot);
+        if (!string.IsNullOrEmpty(resolved) && netId != 0)
+            _nameCache[netId] = resolved;
+        return resolved;
+    }
+
+    private static string ResolveNameUncached(Player player, ulong netId, int slot)
+    {
+        string fallback = player.Character.GetType().Name;
         try
         {
-            ulong localId = SteamUser.GetSteamID().m_SteamID;
-            string name = player.NetId == localId
-                ? SteamFriends.GetPersonaName()
-                : SteamFriends.GetFriendPersonaName(new CSteamID(player.NetId));
-            return string.IsNullOrEmpty(name) ? player.Character.GetType().Name : name;
+            var platform = RunManager.Instance?.NetService?.Platform ?? PlatformUtil.PrimaryPlatform;
+            string resolved = PlatformUtil.GetPlayerName(platform, netId);
+
+            // SteamPlatformUtilStrategy returns netId.ToString() when Steam lookup fails;
+            // treat that bare-number result as unresolved.
+            bool looksLikeRawId = ulong.TryParse(resolved, out _);
+
+            if (_diagLogged.Add(netId))
+            {
+                GD.Print($"[SoulLink] GetPlayerName slot={slot} netId={netId} " +
+                         $"platform={platform} resolved='{resolved}' fallback='{fallback}'");
+            }
+
+            return (string.IsNullOrEmpty(resolved) || looksLikeRawId) ? fallback : resolved;
         }
-        catch
+        catch (Exception ex)
         {
-            return player.Character.GetType().Name;
+            GD.PrintErr($"[SoulLink] GetPlayerName slot={slot} netId={netId} crashed: {ex.Message}");
+            return fallback;
         }
     }
 

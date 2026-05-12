@@ -48,7 +48,10 @@ public class RunStatsPanel : Control
             OffsetRight  = OffLeft + PanelW;
             OffsetBottom = OffTop  + PanelH;
 
-            MouseFilter = MouseFilterEnum.Pass;
+            // Ignore on the root so clicks outside the toggle button fall through to
+            // game UI underneath (back button etc.). The header Button keeps its
+            // default Stop filter, so the collapse toggle still works.
+            MouseFilter = MouseFilterEnum.Ignore;
 
             BuildUI();
             Refresh();
@@ -71,7 +74,7 @@ public class RunStatsPanel : Control
 
     private void BuildUI()
     {
-        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(vbox);
 

@@ -62,6 +62,7 @@ internal static class SettingsSyncHandler
             SplitHeal    = message.SplitHeal,
             GoldMode     = (GoldSharingMode)message.GoldMode,
             SharedLoseHp = message.SharedLoseHp,
+            HpMode       = (HpMode)message.HpMode,
         };
 
         if (SoulLinkSession.IsActive)
@@ -95,7 +96,7 @@ internal static class SettingsSyncHandler
             SoulLinkSession.PendingSyncedRunSettings = settings;
         }
 
-        GD.Print($"[SoulLink] Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, GoldMode={(GoldSharingMode)message.GoldMode}");
+        GD.Print($"[SoulLink] Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, GoldMode={(GoldSharingMode)message.GoldMode}, HpMode={(HpMode)message.HpMode}");
 
         // Refresh the settings panel on the client (read-only view).
         UI.SoulLinkSettingsPanel.Current?.Refresh();
@@ -129,8 +130,8 @@ internal static class GoldChangeActionHandler
     internal static void Handle(GoldChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
-
         var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+        if (goldMode == GoldSharingMode.Default) return;
 
         // In SharedPool mode, deterministic events (e.g. enemy gold steal) execute the same setter
         // on both machines. Both sides apply the delta independently and broadcast an action.
@@ -188,6 +189,7 @@ internal static class HpChangeActionHandler
     internal static void Handle(HpChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
 
         // Skip during init phase (Neow) - it's deterministic, already processed locally.
         if (!SoulLinkSession.IsInitPhaseComplete)
@@ -237,6 +239,7 @@ internal static class MaxHpChangeActionHandler
     internal static void Handle(MaxHpChangeSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
 
         // Skip during init phase (Neow) - it's deterministic, already processed locally.
         if (!SoulLinkSession.IsInitPhaseComplete)
@@ -280,10 +283,10 @@ internal static class GoldSyncHandler
     internal static void Handle(SoulLinkGoldSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+        if (goldMode == GoldSharingMode.Default) return;
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null) return;
-
-        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
         // In SharedPool mode the remote player's setter may have already applied this
         // delta deterministically (e.g. monster gold-steal fires on both machines).
@@ -417,6 +420,7 @@ public static class RunLaunchPatch
                 SplitHeal    = rs.SplitHeal,
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
+                HpMode       = (int)rs.HpMode,
             });
         }
 

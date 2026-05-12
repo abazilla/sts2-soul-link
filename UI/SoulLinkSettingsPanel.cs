@@ -34,6 +34,7 @@ public class SoulLinkSettingsPanel : Control
     private MarginContainer? _margin; // root layout container; drives panel height
 
     // Run setting controls
+    private OptionButton? _hpModeOption;
     private CheckBox?     _cbSplitMaxHp;
     private CheckBox?     _cbSplitHeal;
     private OptionButton? _goldModeOption;
@@ -45,6 +46,7 @@ public class SoulLinkSettingsPanel : Control
     private CheckBox? _cbShowDebugOverlay;
 
     // Descriptor labels for run settings (need to gray out when disabled)
+    private Label? _descHpMode;
     private Label? _descSplitMaxHp;
     private Label? _descSplitHeal;
     private Label? _descGoldMode;  // dynamic — text changes with selection
@@ -142,6 +144,41 @@ public class SoulLinkSettingsPanel : Control
         // ── Run Settings ──────────────────────────────────────────────────────
         vbox.AddChild(MakeLabel("  RUN SETTINGS  (host only)", ColSection, 16));
 
+        vbox.AddChild(MakeLabel("  HP MODE:", ColSection, 16));
+
+        _hpModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
+        _hpModeOption.AddItem("Shared HP pool (default)",       (int)HpMode.SharedPool);
+        _hpModeOption.AddItem("Vanilla HP (per-player)",        (int)HpMode.Vanilla);
+        _hpModeOption.AddItem("Shared Block + Shared Pool",     (int)HpMode.SharedBlockSharedPool);
+        _hpModeOption.AddThemeFontSizeOverride("font_size", 17);
+        SoulLinkFont.Apply(_hpModeOption);
+        {
+            var hpModePopup = _hpModeOption.GetPopup();
+            SoulLinkFont.Apply(hpModePopup);
+            hpModePopup.AddThemeFontSizeOverride("font_size", 17);
+            // Disable SharedBlockSharedPool — not yet implemented.
+            int sbspIdx = _hpModeOption.GetItemIndex((int)HpMode.SharedBlockSharedPool);
+            if (sbspIdx >= 0)
+            {
+                _hpModeOption.SetItemDisabled(sbspIdx, true);
+                _hpModeOption.SetItemText(sbspIdx, "Shared Block + Shared Pool  (coming soon)");
+            }
+        }
+        _hpModeOption.ItemSelected += idx =>
+        {
+            if (_refreshing) return;
+            var mode = (HpMode)_hpModeOption.GetItemId((int)idx);
+            if (mode == HpMode.SharedBlockSharedPool) { DoRefresh(); return; } // revert
+            SoulLinkSettings.Instance.HpMode = mode;
+            SoulLinkSettings.Save();
+            if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
+            if (_descHpMode != null) _descHpMode.Text = HpModeDescriptor(mode);
+            DoRefresh();
+        };
+        vbox.AddChild(_hpModeOption);
+        _descHpMode = MakeDescriptor(HpModeDescriptor(SoulLinkSettings.Instance.HpMode));
+        vbox.AddChild(WrapDescriptor(_descHpMode));
+
         _cbSplitMaxHp = MakeCheckBox("Split MaxHP changes by players");
         _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(_cbSplitMaxHp);
@@ -222,6 +259,7 @@ public class SoulLinkSettingsPanel : Control
         // - Everyone else: show current SoulLinkSettings.
         bool splitMaxHp, splitHeal, sharedLoseHp;
         GoldSharingMode goldMode;
+        HpMode hpMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
@@ -229,6 +267,7 @@ public class SoulLinkSettingsPanel : Control
             splitHeal    = rs.SplitHeal;
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
+            hpMode       = rs.HpMode;
         }
         else
         {
@@ -237,27 +276,48 @@ public class SoulLinkSettingsPanel : Control
             splitHeal    = s.SplitHeal;
             goldMode     = s.GoldMode;
             sharedLoseHp = s.SharedLoseHp;
+            hpMode       = s.HpMode;
         }
 
-        SetCheckBox(_cbSplitMaxHp, splitMaxHp, runEditable);
-        SetDescriptor(_descSplitMaxHp, runEditable);
-        SetCheckBox(_cbSplitHeal,  splitHeal,  runEditable);
-        SetDescriptor(_descSplitHeal, runEditable);
-        SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, runEditable);
+        // HP-related settings are ignored when HpMode == Vanilla; grey them out.
+        bool hpAxisEditable   = runEditable && hpMode != HpMode.Vanilla;
+        // Gold settings are independent of HpMode; editable whenever the run is editable.
+        bool goldAxisEditable = runEditable;
+
+        if (_hpModeOption != null)
+        {
+            int lmIdx = _hpModeOption.GetItemIndex((int)hpMode);
+            if (lmIdx >= 0) _hpModeOption.Selected = lmIdx;
+            _hpModeOption.Disabled = !runEditable;
+            _hpModeOption.Modulate = runEditable
+                ? Colors.White
+                : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 1f);
+        }
+        if (_descHpMode != null)
+        {
+            _descHpMode.Text = HpModeDescriptor(hpMode);
+            SetDescriptor(_descHpMode, runEditable);
+        }
+
+        SetCheckBox(_cbSplitMaxHp, splitMaxHp, hpAxisEditable);
+        SetDescriptor(_descSplitMaxHp, hpAxisEditable);
+        SetCheckBox(_cbSplitHeal,  splitHeal,  hpAxisEditable);
+        SetDescriptor(_descSplitHeal, hpAxisEditable);
+        SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, hpAxisEditable);
 
         if (_goldModeOption != null)
         {
             int itemIdx = _goldModeOption.GetItemIndex((int)goldMode);
             if (itemIdx >= 0) _goldModeOption.Selected = itemIdx;
-            _goldModeOption.Disabled = !runEditable;
-            _goldModeOption.Modulate = runEditable
+            _goldModeOption.Disabled = !goldAxisEditable;
+            _goldModeOption.Modulate = goldAxisEditable
                 ? Colors.White
                 : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 1f);
         }
         if (_descGoldMode != null)
         {
             _descGoldMode.Text = GoldModeDescriptor(goldMode);
-            SetDescriptor(_descGoldMode, runEditable);
+            SetDescriptor(_descGoldMode, goldAxisEditable);
         }
 
         // Panel settings are always locally editable.
@@ -335,6 +395,13 @@ public class SoulLinkSettingsPanel : Control
         if (_margin == null) return;
         OffsetBottom = OffsetTop + _margin.GetCombinedMinimumSize().Y;
     }
+
+    private static string HpModeDescriptor(HpMode mode) => mode switch
+    {
+        HpMode.Vanilla                => "Vanilla per-player HP — gold sharing follows the GoldMode setting below",
+        HpMode.SharedBlockSharedPool  => "Coming soon",
+        _                             => "Shared HP pool across all players (default Soul Link behaviour)",
+    };
 
     private static string GoldModeDescriptor(GoldSharingMode mode) => mode switch
     {

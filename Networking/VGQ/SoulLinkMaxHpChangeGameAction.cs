@@ -38,6 +38,15 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
         PlayerSlot = playerSlot;
         InCombat = inCombat;
         Source = source;
+        _ownerId = ResolveOwnerId(playerSlot);
+    }
+
+    private static ulong ResolveOwnerId(int playerSlot)
+    {
+        var rs = RunManager.Instance?.DebugOnlyGetState();
+        if (rs != null && playerSlot >= 0 && playerSlot < rs.Players.Count)
+            return rs.Players[playerSlot].NetId;
+        return LocalContext.NetId ?? 0;
     }
 
     /// <summary>
@@ -47,9 +56,12 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
     {
     }
 
-    public override GameActionType ActionType => InCombat ? GameActionType.Combat : GameActionType.NonCombat;
+    public override GameActionType ActionType
+        => SoulLinkMod.IsCombatActive() ? GameActionType.Combat : GameActionType.NonCombat;
 
-    public override ulong OwnerId => 0; // System-owned action (not tied to a specific player)
+    private ulong _ownerId;
+    public void SetOwnerId(ulong id) => _ownerId = id;
+    public override ulong OwnerId => _ownerId;
 
     public override MegaCrit.Sts2.Core.GameActions.Multiplayer.INetAction ToNetAction()
     {
@@ -75,6 +87,8 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
             return;
         }
 
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
+
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.SharedHealthPool))
             return;
 
@@ -97,15 +111,10 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
 
         int playerCount = runState.Players.Count;
 
-        // Re-evaluate InCombat flag at execution time (not message send time)
-        bool actualInCombat = MegaCrit.Sts2.Core.Combat.CombatManager.Instance?.IsInProgress ?? false;
-        if (actualInCombat != InCombat)
-        {
-            GD.Print($"[SoulLink][VGQ] InCombat flag mismatch: action={InCombat}, actual={actualInCombat}. Using actual.");
-        }
-
-        // Apply the delta to the shared MaxHP pool (also handles clamping CurrentHp)
-        SoulLinkSession.ApplyMaxHpDelta(DeltaMaxHp, actualInCombat, playerCount, PlayerSlot, Source);
+        // Use the originator's snapshotted InCombat flag (not local CombatManager state):
+        // peers may execute this action across a combat-state transition, and local
+        // re-evaluation diverges them. The originator's snapshot is authoritative.
+        SoulLinkSession.ApplyMaxHpDelta(DeltaMaxHp, InCombat, playerCount, PlayerSlot, Source);
         int canonicalMaxHp = SoulLinkSession.MaxHp;
         int canonicalHp = SoulLinkSession.CurrentHp;
 

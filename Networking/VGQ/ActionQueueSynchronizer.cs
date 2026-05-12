@@ -54,6 +54,7 @@ public static class ActionQueueSynchronizer
     /// </summary>
     public static void RequestEnqueueHpChange(int deltaHp, int playerSlot, bool inCombat, string? source = null)
     {
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
         RequestEnqueue(new SoulLinkHpChangeGameAction(deltaHp, playerSlot, inCombat, source));
     }
 
@@ -62,14 +63,16 @@ public static class ActionQueueSynchronizer
     /// </summary>
     public static void RequestEnqueueMaxHpChange(int deltaMaxHp, int playerSlot, bool inCombat, string? source = null)
     {
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
         RequestEnqueue(new SoulLinkMaxHpChangeGameAction(deltaMaxHp, playerSlot, inCombat, source));
     }
 
     /// <summary>
     /// Convenience method for enqueueing Gold change actions.
     /// </summary>
-    public static void RequestEnqueueGoldChange(int deltaGold, int playerSlot, GoldSharingMode mode, string? source = null)
+    public static void RequestEnqueueGoldChange(int deltaGold, int playerSlot, GoldSharingMode mode, bool inCombat, string? source = null)
     {
-        RequestEnqueue(new SoulLinkGoldChangeGameAction(deltaGold, playerSlot, mode, source));
+        if (mode == GoldSharingMode.Default) return;
+        RequestEnqueue(new SoulLinkGoldChangeGameAction(deltaGold, playerSlot, mode, inCombat, source));
     }
 }

@@ -6,6 +6,7 @@ using HarmonyLib;
 using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 using SoulLinkMod.VGQ;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
@@ -104,7 +105,6 @@ public static class GoldSyncPatch
         // Canonical writes (from GoldSyncHandler / mirror logic) always go through.
         if (SoulLinkMod.ApplyingCanonical) return true;
         if (!SoulLinkSession.IsActive) return true;
-
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null) return true;
 
@@ -127,6 +127,32 @@ public static class GoldSyncPatch
         if (goldMode == GoldSharingMode.Default) return true;
 
         int playerCount = runState.Players.Count;
+
+        // VGQ path owns the apply on every peer via ExecuteAction. The patch only
+        // detects the delta on the originating (local-player) peer and enqueues.
+        // For non-local-player setters here, do nothing — VGQ will broadcast to us.
+        bool useVgqBroadcast = FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
+            && SoulLinkSession.IsInitPhaseComplete;
+        if (useVgqBroadcast)
+        {
+            if (LocalContext.IsMe(__instance))
+            {
+                int vgqDelta = value - __instance.Gold;
+                if (vgqDelta != 0)
+                {
+                    string? vgqSource = SoulLinkSession.PendingSource
+                        ?? SoulLinkSession.CurrentRoomSource;
+                    SoulLinkSession.PendingSource = null;
+                    bool inCombat = SoulLinkMod.IsCombatActive();
+                    ActionQueueSynchronizer.RequestEnqueueGoldChange(vgqDelta, playerSlot, goldMode, inCombat, vgqSource);
+                }
+            }
+            // Block vanilla setter on every peer. VGQ ExecuteAction runs synchronously
+            // inside RequestEnqueue on the originator and has already mirrored the
+            // canonical to all players (including this one) under ApplyingCanonical.
+            // Letting vanilla resume would overwrite the canonical with the raw value.
+            return false;
+        }
 
         // ── Remote player ───────────────────────────────────────────────────────
         if (!LocalContext.IsMe(__instance))
@@ -257,15 +283,9 @@ public static class GoldSyncPatch
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Broadcast the gold change.
-        // VGQ path: Use vanilla GameAction queue (target architecture)
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
-        {
-            // NOTE: Uses reflection discovery until correct API is found
-            ActionQueueSynchronizer.RequestEnqueueGoldChange(broadcastDelta, playerSlot, goldMode, source);
-        }
+        // Broadcast the gold change (legacy paths only; VGQ handled at top of method).
         // MNA path: Use Mod Net Action pipeline (transitional)
-        else if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
         {
             NetActionService.EnqueueLocalAction(new GoldChangeAction
             {

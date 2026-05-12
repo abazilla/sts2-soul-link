@@ -27,17 +27,28 @@ public class SoulLinkGoldChangeGameAction : GameAction
     public int DeltaGold { get; private set; }
     public int PlayerSlot { get; private set; }
     public GoldSharingMode Mode { get; private set; }
+    public bool InCombat { get; private set; }
     public string? Source { get; private set; }
 
     /// <summary>
     /// Constructor for local action creation (host enqueueing the action).
     /// </summary>
-    public SoulLinkGoldChangeGameAction(int deltaGold, int playerSlot, GoldSharingMode mode, string? source = null)
+    public SoulLinkGoldChangeGameAction(int deltaGold, int playerSlot, GoldSharingMode mode, bool inCombat, string? source = null)
     {
         DeltaGold = deltaGold;
         PlayerSlot = playerSlot;
         Mode = mode;
+        InCombat = inCombat;
         Source = source;
+        _ownerId = ResolveOwnerId(playerSlot);
+    }
+
+    private static ulong ResolveOwnerId(int playerSlot)
+    {
+        var rs = RunManager.Instance?.DebugOnlyGetState();
+        if (rs != null && playerSlot >= 0 && playerSlot < rs.Players.Count)
+            return rs.Players[playerSlot].NetId;
+        return LocalContext.NetId ?? 0;
     }
 
     /// <summary>
@@ -47,9 +58,12 @@ public class SoulLinkGoldChangeGameAction : GameAction
     {
     }
 
-    public override GameActionType ActionType => GameActionType.NonCombat;
+    public override GameActionType ActionType
+        => SoulLinkMod.IsCombatActive() ? GameActionType.Combat : GameActionType.NonCombat;
 
-    public override ulong OwnerId => 0; // System-owned action (not tied to a specific player)
+    private ulong _ownerId;
+    public void SetOwnerId(ulong id) => _ownerId = id;
+    public override ulong OwnerId => _ownerId;
 
     public override MegaCrit.Sts2.Core.GameActions.Multiplayer.INetAction ToNetAction()
     {
@@ -58,6 +72,7 @@ public class SoulLinkGoldChangeGameAction : GameAction
             DeltaGold = this.DeltaGold,
             PlayerSlot = this.PlayerSlot,
             Mode = this.Mode,
+            InCombat = this.InCombat,
             Source = this.Source
         };
     }
@@ -74,6 +89,8 @@ public class SoulLinkGoldChangeGameAction : GameAction
             GD.PrintErr("[SoulLink][VGQ] SoulLinkGoldChangeGameAction executed but UseVGQSync is disabled");
             return;
         }
+
+        if (SoulLinkSession.ActiveRunSettings.GoldMode == GoldSharingMode.Default) return;
 
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.GoldSharing))
             return;
@@ -98,6 +115,7 @@ public class SoulLinkGoldChangeGameAction : GameAction
         int canonicalGold = 0;
         int playerCount = runState.Players.Count;
 
+        // VGQ is the single source of truth: apply on every peer.
         if (Mode == GoldSharingMode.SharedPool)
         {
             // SharedPool: all players share one gold pool
@@ -153,11 +171,12 @@ public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multi
     public int DeltaGold { get; set; }
     public int PlayerSlot { get; set; }
     public GoldSharingMode Mode { get; set; }
+    public bool InCombat { get; set; }
     public string? Source { get; set; }
 
     public GameAction ToGameAction(MegaCrit.Sts2.Core.Entities.Players.Player player)
     {
-        return new SoulLinkGoldChangeGameAction(DeltaGold, PlayerSlot, Mode, Source);
+        return new SoulLinkGoldChangeGameAction(DeltaGold, PlayerSlot, Mode, InCombat, Source);
     }
 
     public void Serialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketWriter writer)
@@ -165,6 +184,7 @@ public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multi
         writer.WriteInt(DeltaGold, 32);
         writer.WriteInt(PlayerSlot, 8);
         writer.WriteEnum(Mode);
+        writer.WriteBool(InCombat);
         if (Source != null)
         {
             writer.WriteBool(true);
@@ -181,6 +201,7 @@ public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multi
         DeltaGold = reader.ReadInt(32);
         PlayerSlot = reader.ReadInt(8);
         Mode = reader.ReadEnum<GoldSharingMode>();
+        InCombat = reader.ReadBool();
         bool hasSource = reader.ReadBool();
         Source = hasSource ? reader.ReadString() : null;
     }

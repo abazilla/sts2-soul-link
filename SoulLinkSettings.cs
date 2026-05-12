@@ -42,6 +42,7 @@ public class SoulLinkSettings
     /// when a teammate takes unblocked damage.
     /// </summary>
     public bool SharedLoseHp { get; set; } = true;
+    public HpMode HpMode { get; set; } = HpMode.SharedPool;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
@@ -58,6 +59,7 @@ public class SoulLinkSettings
         SplitHeal    = SplitHeal,
         GoldMode     = GoldMode,
         SharedLoseHp = SharedLoseHp,
+        HpMode       = HpMode,
     };
 
     // ── Persistence ───────────────────────────────────────────────────────────

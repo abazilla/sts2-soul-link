@@ -38,6 +38,15 @@ public class SoulLinkHpChangeGameAction : GameAction
         PlayerSlot = playerSlot;
         InCombat = inCombat;
         Source = source;
+        _ownerId = ResolveOwnerId(playerSlot);
+    }
+
+    private static ulong ResolveOwnerId(int playerSlot)
+    {
+        var rs = RunManager.Instance?.DebugOnlyGetState();
+        if (rs != null && playerSlot >= 0 && playerSlot < rs.Players.Count)
+            return rs.Players[playerSlot].NetId;
+        return LocalContext.NetId ?? 0;
     }
 
     /// <summary>
@@ -47,9 +56,18 @@ public class SoulLinkHpChangeGameAction : GameAction
     {
     }
 
-    public override GameActionType ActionType => InCombat ? GameActionType.Combat : GameActionType.NonCombat;
+    // Re-evaluate at execute time, not constructor time. The originating peer may
+    // capture inCombat=false during NCombatRoom._Ready (before CombatManager flips),
+    // but combat starts moments later — the queue would then refuse a NonCombat-typed
+    // action at the head of the queue and jam it forever. The InCombat field above
+    // is still constructor-snapshotted because the *apply* semantics (HP scaling)
+    // intentionally use the originator's view; type is purely about queue eligibility.
+    public override GameActionType ActionType
+        => SoulLinkMod.IsCombatActive() ? GameActionType.Combat : GameActionType.NonCombat;
 
-    public override ulong OwnerId => 0; // System-owned action (not tied to a specific player)
+    private ulong _ownerId;
+    public void SetOwnerId(ulong id) => _ownerId = id;
+    public override ulong OwnerId => _ownerId;
 
     public override MegaCrit.Sts2.Core.GameActions.Multiplayer.INetAction ToNetAction()
     {
@@ -75,6 +93,8 @@ public class SoulLinkHpChangeGameAction : GameAction
             return;
         }
 
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
+
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.SharedHealthPool))
             return;
 
@@ -97,15 +117,10 @@ public class SoulLinkHpChangeGameAction : GameAction
 
         int playerCount = runState.Players.Count;
 
-        // Re-evaluate InCombat flag at execution time (not message send time)
-        bool actualInCombat = MegaCrit.Sts2.Core.Combat.CombatManager.Instance?.IsInProgress ?? false;
-        if (actualInCombat != InCombat)
-        {
-            GD.Print($"[SoulLink][VGQ] InCombat flag mismatch: action={InCombat}, actual={actualInCombat}. Using actual.");
-        }
-
-        // Apply the delta to the shared HP pool
-        int canonical = SoulLinkSession.ApplyHpDelta(DeltaHp, actualInCombat, playerCount, PlayerSlot, Source);
+        // Use the originator's snapshotted InCombat flag (not local CombatManager state):
+        // peers may execute this action across a combat-state transition, and local
+        // re-evaluation diverges them. The originator's snapshot is authoritative.
+        int canonical = SoulLinkSession.ApplyHpDelta(DeltaHp, InCombat, playerCount, PlayerSlot, Source);
 
         // Write canonical HP to all player creatures
         SoulLinkMod.ApplyingCanonical = true;

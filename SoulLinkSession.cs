@@ -189,7 +189,13 @@ public static class SoulLinkSession
 
         // Always re-save so re-hosting from this save will see the correct settings.
         SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
-        GD.Print($"[SoulLink] Run settings: SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+        GD.Print($"[SoulLink] Run settings: HpMode={ActiveRunSettings.HpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+
+        // Vanilla HpMode never routes through ApplyHpDelta, so the in-combat trigger that
+        // flips _initPhaseComplete never fires. Mark complete now so gold log entries
+        // (and any other non-HP entries) aren't suppressed by AddEntry's gate.
+        if (ActiveRunSettings.HpMode == HpMode.Vanilla)
+            _initPhaseComplete = true;
 
         MaxHp     = sharedMaxHp;
         CurrentHp = sharedCurrentHp;
@@ -289,9 +295,16 @@ public static class SoulLinkSession
             {
                 // This heal is the follow-up to a MaxHP gain and equals the MaxHp delta
                 // exactly — the game already computed it from our scaled MaxHp value, so
-                // don't scale it again. If rawDelta > pendingHeal (e.g. Lee's Waffle
-                // heals to full, not just +maxHpDelta), fall through to normal scaling.
+                // don't scale it again.
                 delta = pendingHeal;
+            }
+            else if (pendingHeal > 0 && rawDelta > pendingHeal)
+            {
+                // Heal-to-full follow-up after MaxHP gain (e.g. Lee's Waffle).
+                // Per-player vanilla heals to its own MaxHp; in SharedPool the
+                // intent is "fill the pool", so heal the pool to MaxHp regardless
+                // of the per-player delta the game computed.
+                delta = MaxHp - CurrentHp;
             }
             else if (_initPhaseComplete && playerCount > 1 && ActiveRunSettings.SplitHeal)
             {
@@ -518,6 +531,7 @@ public static class SoulLinkSession
                 SplitHeal    = s.SplitHeal,
                 GoldMode     = (int)s.GoldMode,
                 SharedLoseHp = s.SharedLoseHp,
+                HpMode       = (int)s.HpMode,
             });
         }
         catch (Exception ex)

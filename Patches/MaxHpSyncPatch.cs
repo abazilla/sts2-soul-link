@@ -25,13 +25,14 @@ public static class MaxHpSyncPatch
     static MethodBase TargetMethod()
         => AccessTools.PropertySetter(typeof(Creature), nameof(Creature.MaxHp));
 
-    static void Prefix(Creature __instance, ref int value)
+    static bool Prefix(Creature __instance, ref int value)
     {
-        if (SoulLinkMod.ApplyingCanonical) return;
-        if (!SoulLinkSession.IsActive) return;
+        if (SoulLinkMod.ApplyingCanonical) return true;
+        if (!SoulLinkSession.IsActive) return true;
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return true;
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
-        if (runState == null) return;
+        if (runState == null) return true;
 
         int playerSlot = -1;
         for (int i = 0; i < runState.Players.Count; i++)
@@ -42,15 +43,15 @@ public static class MaxHpSyncPatch
                 break;
             }
         }
-        if (playerSlot < 0) return;
+        if (playerSlot < 0) return true;
 
         int delta = value - __instance.MaxHp;
-        if (delta == 0) return;
+        if (delta == 0) return true;
 
         bool isLocalPlayer = LocalContext.IsMe(runState.Players[playerSlot]);
         Godot.GD.Print($"[SoulLink][MaxHpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.MaxHp}");
 
-        bool inCombat = CombatManager.Instance.IsInProgress;
+        bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;
 
         string? source = SoulLinkSession.PendingSource
@@ -58,13 +59,32 @@ public static class MaxHpSyncPatch
             ?? (inCombat ? "Combat" : "Out of combat");
         SoulLinkSession.PendingSource = null;
 
+        // VGQ path owns the apply on every peer via ExecuteAction. The patch only
+        // detects + enqueues on the originating peer. Skip local mutation entirely
+        // to avoid double-apply when VGQ executes.
+        bool useVgqBroadcast = FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
+            && SoulLinkSession.IsInitPhaseComplete
+            && !inCombat;
+        if (useVgqBroadcast)
+        {
+            if (isLocalPlayer)
+            {
+                ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
+            }
+            // Block vanilla setter on every peer. VGQ ExecuteAction runs synchronously
+            // inside RequestEnqueue on the originator and has already mirrored the
+            // canonical to all creatures (including this one) under ApplyingCanonical.
+            // Letting vanilla resume would overwrite the canonical with the raw value.
+            return false;
+        }
+
         // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup)
         bool applied = SyncCoordinator.TryApplyMaxHpDelta(playerSlot, delta, isFromNetwork: false, inCombat, playerCount, source);
         if (!applied)
         {
             // Already applied by network path - redirect to canonical to prevent stale write
             value = SyncCoordinator.GetCanonicalMaxHp();
-            return;
+            return true;
         }
 
         // Redirect the write on the triggering player.
@@ -91,24 +111,8 @@ public static class MaxHpSyncPatch
             SoulLinkMod.ApplyingCanonical = false;
         }
 
-        // Broadcast the MaxHP change.
-        // Skip during init phase (Neow) and combat - both are deterministic.
-        // Combat: game syncs card plays, each client processes independently.
-
-        // VGQ path: Use vanilla GameAction queue (target architecture)
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
-            && SoulLinkSession.IsInitPhaseComplete
-            && !inCombat)
-        {
-            if (isLocalPlayer)
-            {
-                // Enqueue MaxHP change to vanilla action queue (VGQ architecture)
-                // NOTE: Uses reflection discovery until correct API is found
-                ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
-            }
-        }
         // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
-        else if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
+        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
             && !inCombat)
         {
@@ -128,5 +132,6 @@ public static class MaxHpSyncPatch
         CombatLogPanel.Current?.Refresh();
         RunStatsPanel.Current?.Refresh();
         DebugOverlay.Current?.Refresh();
+        return true;
     }
 }
