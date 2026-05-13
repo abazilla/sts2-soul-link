@@ -58,12 +58,19 @@ public class SoulLinkGoldChangeGameAction : GameAction
     {
     }
 
-    // Always NonCombat: gold changes fire post-combat (rewards), in shops, in events.
-    // Typing as Combat causes the post-combat reward to be rejected by ActionQueueSet
-    // during its "cancelling all combat actions" window between IsInProgress=false and
-    // NCombatRoom._ExitTree (when IsCombatActive() still returns true via CombatRoomActive).
-    // In-combat gold changes (e.g. Gremlin Merchant steal) also work fine as NonCombat.
-    public override GameActionType ActionType => GameActionType.NonCombat;
+    // Use vanilla CombatManager.IsInProgress directly (NOT SoulLinkMod.IsCombatActive,
+    // whose CombatRoomActive bridge stays true through the post-combat reward window).
+    //   - Mid-combat steal (Gremlin Merc GIMME_MOVE): IsInProgress=true → Combat → runs
+    //     in PlayPhase. NonCombat would be blocked ("currently in combat and candidate
+    //     action ... NonCombat") and jam the queue head, soft-locking all peers.
+    //   - Post-combat reward: IsInProgress=false (vanilla flips it before the reward
+    //     fires) → NonCombat → passes ActionQueueSet's cancel-Combat window and runs
+    //     once combat state settles. Combat-typed here would be cancelled at enqueue.
+    // Re-evaluated at execute time so each peer's type matches its own queue state.
+    public override GameActionType ActionType
+        => MegaCrit.Sts2.Core.Combat.CombatManager.Instance?.IsInProgress == true
+            ? GameActionType.Combat
+            : GameActionType.NonCombat;
 
     private ulong _ownerId;
     public void SetOwnerId(ulong id) => _ownerId = id;

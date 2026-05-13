@@ -54,31 +54,13 @@ public static class MaxHpSyncPatch
         bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;
 
-        // Init-phase overwrite path (mirrors HpSyncPatch). See HpSyncPatch for rationale.
-        if (!SoulLinkSession.IsInitPhaseComplete && !inCombat)
-        {
-            SoulLinkSession.OverwriteCanonicalMaxHp(value);
-            int canonicalMax = SoulLinkSession.MaxHp;
-            int canonicalCur = SoulLinkSession.CurrentHp;
-            value = canonicalMax;
-            SoulLinkMod.ApplyingCanonical = true;
-            try
-            {
-                foreach (var player in runState.Players)
-                {
-                    if (player.Creature != __instance)
-                    {
-                        player.Creature.SetMaxHp(canonicalMax);
-                        player.Creature.SetCurrentHp(canonicalCur);
-                    }
-                }
-            }
-            finally { SoulLinkMod.ApplyingCanonical = false; }
-            CombatLogPanel.Current?.Refresh();
-            RunStatsPanel.Current?.Refresh();
-            DebugOverlay.Current?.Refresh();
-            return true;
-        }
+        // No init-phase MaxHp branch: vanilla character/ascension setup never writes MaxHp
+        // through the public setter (it uses reflection on the backing field), so any
+        // MaxHp setter call we intercept during init is already a real player-visible
+        // event (Neow downside, etc.) that must go through ApplyMaxHpDelta for proper
+        // SplitMaxHp scaling and delta-correct logging. Falling into the canonical-pool
+        // path also avoids the bug where comparing `value` against the (lazy-grown)
+        // canonical pool produced wrong deltas while creature MaxHp was higher than pool.
 
         if (inCombat && !SoulLinkSession.IsInitPhaseComplete)
             SoulLinkSession.MarkInitPhaseComplete();

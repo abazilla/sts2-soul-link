@@ -75,6 +75,20 @@ public static class SoulLinkSession
     // After the first combat, campfire/event heals fire once per player, so scaling applies.
     private static bool _initPhaseComplete;
 
+    // Per-slot init-seed tracking. Vanilla character setup writes each player's CurrentHp
+    // twice at run start: value=0, then value=postAscensionStartingHp. Each slot's writes
+    // are recorded in _initialCurrentHpSeeds and the slot is marked seeded once we see its
+    // positive value. Canonical CurrentHp is not touched during this collection — once
+    // every slot has reported, CurrentHp is finalised as the average of the seeds. This
+    // matches "Pool CurrentHp = avg(player.Creature.CurrentHp after ascension)" and works
+    // for mixed-character parties (Ironclad 80, Silent 70, Defect 75, …).
+    // MaxHp does NOT need this: pool MaxHp is seeded in OnRunStart from creature averages
+    // (creatures already carry their character MaxHp before any ascension writes fire), and
+    // vanilla's char/ascension init never writes MaxHp through the public setter (uses
+    // reflection on the backing field), so MaxHpSyncPatch only sees real events anyway.
+    private static bool[] _slotCurrentHpSeeded   = Array.Empty<bool>();
+    private static int[]  _initialCurrentHpSeeds = Array.Empty<int>();
+
     /// <summary>
     /// True once the first combat has started. Used to skip network sync during Neow
     /// (which is deterministic and doesn't need sync).
@@ -85,26 +99,49 @@ public static class SoulLinkSession
 
     /// <summary>
     /// Init-phase HP setter: overwrites canonical CurrentHp directly with the given value
-    /// (no delta math, no logging, no scaling). Used during the run-start window where
-    /// vanilla performs per-peer initialization writes (ascension scaling, character
-    /// setup, Neow setup) whose ordering and intermediate values are not knowable in
-    /// advance — trusting the final written value is more robust than tracking deltas.
+    /// (no delta math, no scaling). Used during the run-start window where vanilla performs
+    /// per-peer initialization writes (ascension scaling, character setup, Neow setup) whose
+    /// ordering and intermediate values are not knowable in advance — trusting the final
+    /// written value is more robust than tracking deltas.
+    ///
+    /// Emits a log entry for the change unless this is the first 0 → starting CurrentHp
+    /// seed of a fresh run (vanilla's character-setup heal, not a player-visible event).
     /// </summary>
-    public static void OverwriteCanonicalHp(int value)
+    public static void OverwriteCanonicalHp(int value, int playerSlot, string? source)
     {
         int v = Math.Max(0, value);
-        if (v > MaxHp) MaxHp = v;  // grow MaxHp lazily so HP write before MaxHp seed isn't clamped
-        CurrentHp = v;
-    }
 
-    /// <summary>
-    /// Init-phase MaxHp setter: overwrites canonical MaxHp directly. Clamps CurrentHp
-    /// if it now exceeds the new MaxHp.
-    /// </summary>
-    public static void OverwriteCanonicalMaxHp(int value)
-    {
-        MaxHp = Math.Max(1, value);
-        if (CurrentHp > MaxHp) CurrentHp = MaxHp;
+        // Per-slot init-seed collection. Vanilla writes each player's CurrentHp twice
+        // during ascension setup (0 then post-ascension HP); record each slot's positive
+        // value. Canonical CurrentHp tracks the latest write (so HpSyncPatch's mirror loop
+        // keeps every creature in sync with what vanilla wrote). Once every slot has been
+        // seeded, override canonical = avg(seeds) so the shared pool reflects the
+        // post-ascension HP across all characters (works for mixed-character parties).
+        if (playerSlot >= 0 && playerSlot < _slotCurrentHpSeeded.Length && !_slotCurrentHpSeeded[playerSlot])
+        {
+            CurrentHp = Math.Min(v, MaxHp);
+            _initialCurrentHpSeeds[playerSlot] = v;
+            if (v > 0) _slotCurrentHpSeeded[playerSlot] = true;
+
+            bool allSeeded = true;
+            for (int i = 0; i < _slotCurrentHpSeeded.Length; i++)
+                if (!_slotCurrentHpSeeded[i]) { allSeeded = false; break; }
+            if (allSeeded)
+            {
+                double sum = 0;
+                for (int i = 0; i < _initialCurrentHpSeeds.Length; i++) sum += _initialCurrentHpSeeds[i];
+                int avg = (int)Math.Round(sum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
+                CurrentHp = Math.Min(avg, MaxHp);
+            }
+            return;
+        }
+
+        int previous = CurrentHp;
+        CurrentHp = Math.Min(v, MaxHp);
+
+        int delta = CurrentHp - previous;
+        if (delta != 0)
+            AddEntry(new LogEntry(LogEntryType.Health, playerSlot, delta, 0, source));
     }
 
     // HealInternal receives the unclamped heal amount before SetCurrentHpInternal clamps it
@@ -184,6 +221,11 @@ public static class SoulLinkSession
             }
         }
 
+        // Allocate per-slot seed arrays. Sized from player count so any party size works.
+        int slotCount = runState.Players.Count;
+        if (_slotCurrentHpSeeded.Length   != slotCount) _slotCurrentHpSeeded   = new bool[slotCount];
+        if (_initialCurrentHpSeeds.Length != slotCount) _initialCurrentHpSeeds = new int[slotCount];
+
         int sharedMaxHp;
         int sharedCurrentHp;
         if (isSaveLoad)
@@ -193,16 +235,22 @@ public static class SoulLinkSession
                 p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
             GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
             _initPhaseComplete = true;
+            Array.Fill(_slotCurrentHpSeeded, true);
+            for (int i = 0; i < slotCount; i++)
+                _initialCurrentHpSeeds[i] = runState.Players[i].Creature.CurrentHp;
         }
         else
         {
-            // Fresh run: leave canonical at 0/0. HpSyncPatch / MaxHpSyncPatch overwrite
-            // canonical from vanilla's first per-peer writes (character/ascension setup),
-            // avoiding the N× delta drain that would otherwise zero the pool.
-            sharedMaxHp = 0;
+            // Fresh run: seed pool MaxHp from the average of each player's character MaxHp
+            // (creatures already carry their starting MaxHp before any ascension scaling
+            // touches CurrentHp). CurrentHp is deferred — captured per-slot by HpSyncPatch
+            // during vanilla's ascension writes, then averaged once every slot has reported.
+            sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
             sharedCurrentHp = 0;
             _initPhaseComplete = false;
-            GD.Print("[SoulLink] Fresh run — canonical pool deferred; will seed from vanilla's first HP writes.");
+            Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
+            Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
+            GD.Print($"[SoulLink] Fresh run — pool MaxHp seeded to {sharedMaxHp}; CurrentHp deferred until vanilla's per-peer ascension writes finish.");
         }
 
         // Determine which run settings to use.
@@ -232,7 +280,12 @@ public static class SoulLinkSession
         // flips _initPhaseComplete never fires. Mark complete now so gold log entries
         // (and any other non-HP entries) aren't suppressed by AddEntry's gate.
         if (ActiveRunSettings.HpMode == HpMode.Vanilla)
+        {
             _initPhaseComplete = true;
+            Array.Fill(_slotCurrentHpSeeded, true);
+            for (int i = 0; i < slotCount; i++)
+                _initialCurrentHpSeeds[i] = runState.Players[i].Creature.CurrentHp;
+        }
 
         MaxHp     = sharedMaxHp;
         CurrentHp = sharedCurrentHp;
@@ -284,6 +337,8 @@ public static class SoulLinkSession
         _pendingMaxHpHeal         = 0;
         _pendingHpClamp           = 0;
         _initPhaseComplete        = false;
+        Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
+        Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
         PendingSource             = null;
         PerPeerDeterministicHeal  = false;
         CurrentRoomSource         = null;
@@ -411,6 +466,9 @@ public static class SoulLinkSession
         if (CurrentHp < oldCurrentHp)
             _pendingHpClamp = oldCurrentHp - CurrentHp;
 
+        // Log the scaled delta — what the shared pool actually lost/gained. Under
+        // SplitMaxHp, a Neow card saying "-12 Max HP" only drops the shared pool by
+        // -12/N, so the log reflects the post-scaling effect each player experienced.
         AddEntry(new LogEntry(LogEntryType.Health, playerSlot, 0, scaledDelta, source));
     }
 
@@ -621,10 +679,9 @@ public static class SoulLinkSession
 
     private static void AddEntry(LogEntry entry)
     {
-        // Suppress all log entries during the run-start initialization phase (Neow choices,
-        // starting HP averaging). Only begin logging once the first combat has started.
-        if (!_initPhaseComplete) return;
-
+        // Init-phase events (Neow choices, gifts, downsides) DO log. The initial 0 →
+        // starting HP/MaxHp seed writes are filtered upstream in OverwriteCanonical*
+        // so vanilla's character-setup heal doesn't appear here.
         _log.AddFirst(entry);
         while (_log.Count > LogCapacity)
             _log.RemoveLast();

@@ -66,7 +66,12 @@ public static class HpSyncPatch
         // mirror propagates it to all peers.
         if (!SoulLinkSession.IsInitPhaseComplete && !inCombat)
         {
-            SoulLinkSession.OverwriteCanonicalHp(value);
+            string? initSource = SoulLinkSession.PendingSource
+                ?? ResolveActiveAttacker(__instance, inCombat)
+                ?? SoulLinkSession.CurrentRoomSource
+                ?? "Out of combat";
+            SoulLinkSession.PendingSource = null;
+            SoulLinkSession.OverwriteCanonicalHp(value, playerSlot, initSource);
             int canonical = SoulLinkSession.CurrentHp;
             value = canonical;
             SoulLinkMod.ApplyingCanonical = true;
