@@ -27,7 +27,7 @@ public static class LizardTailSoulLinkPatch
         if (!__result) return; // Original already saving someone — nothing to do.
 
         if (!SoulLinkSession.IsActive) return;
-        if (!SoulLinkSession.ActiveRunSettings.SharedLoseHp) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode != HpMode.SharedPool) return;
         if (__instance.WasUsed) return;
 
         var owner = __instance.Owner?.Creature;

@@ -126,8 +126,10 @@ public static class HpSyncPatch
             return true;
         }
 
+        int canonicalHp = result.Value;
+
         // Redirect the write on the triggering player.
-        value = result.Value;
+        value = canonicalHp;
 
         // Write canonical to all other players.
         SoulLinkMod.ApplyingCanonical = true;
@@ -136,7 +138,7 @@ public static class HpSyncPatch
             foreach (var player in runState.Players)
             {
                 if (player.Creature != __instance)
-                    player.Creature.SetCurrentHp(result.Value);
+                    player.Creature.SetCurrentHp(canonicalHp);
             }
         }
         finally

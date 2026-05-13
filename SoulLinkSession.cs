@@ -439,6 +439,20 @@ public static class SoulLinkSession
     }
 
     /// <summary>
+    /// Revive heal: overwrites the canonical pool with the given absolute value
+    /// (clamped to MaxHp) and emits a log entry. Bypasses SplitHeal scaling — this
+    /// represents a single consume event (Fairy/Lizard), not a per-peer heal.
+    /// </summary>
+    public static void ReviveCanonicalHp(int healed, int playerSlot, string? source)
+    {
+        int previous = CurrentHp;
+        CurrentHp = Math.Clamp(healed, 0, MaxHp);
+        int delta = CurrentHp - previous;
+        if (delta != 0)
+            AddEntry(new LogEntry(LogEntryType.Health, playerSlot, delta, 0, source));
+    }
+
+    /// <summary>
     /// Called from MaxHpSyncPatch. Updates canonical max HP (and clamps current HP).
     /// </summary>
     public static void ApplyMaxHpDelta(int delta, bool inCombat, int playerCount, int playerSlot, string? source = null)
