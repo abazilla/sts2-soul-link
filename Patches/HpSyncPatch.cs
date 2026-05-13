@@ -57,6 +57,36 @@ public static class HpSyncPatch
         bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;
 
+        // Init-phase overwrite path. Until the first combat starts, vanilla performs
+        // per-peer initialization writes (character setup, ascension scaling, Neow setup)
+        // whose intermediate values vary and whose ordering is opaque. Trusting the
+        // final written value avoids the N× delta drain that previously zeroed the pool.
+        // Legitimate Neow damage options (Precarious Shears, Lament) flow through the
+        // same path: each writes a final HP value that overwrites canonical, then
+        // mirror propagates it to all peers.
+        if (!SoulLinkSession.IsInitPhaseComplete && !inCombat)
+        {
+            SoulLinkSession.OverwriteCanonicalHp(value);
+            int canonical = SoulLinkSession.CurrentHp;
+            value = canonical;
+            SoulLinkMod.ApplyingCanonical = true;
+            try
+            {
+                foreach (var player in runState.Players)
+                    if (player.Creature != __instance)
+                        player.Creature.SetCurrentHp(canonical);
+            }
+            finally { SoulLinkMod.ApplyingCanonical = false; }
+            CombatLogPanel.Current?.Refresh();
+            RunStatsPanel.Current?.Refresh();
+            DebugOverlay.Current?.Refresh();
+            return true;
+        }
+
+        // First combat write: leave init phase.
+        if (inCombat && !SoulLinkSession.IsInitPhaseComplete)
+            SoulLinkSession.MarkInitPhaseComplete();
+
         string? source = SoulLinkSession.PendingSource
             ?? ResolveActiveAttacker(__instance, inCombat)
             ?? SoulLinkSession.CurrentRoomSource

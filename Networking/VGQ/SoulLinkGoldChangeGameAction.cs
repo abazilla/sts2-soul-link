@@ -58,8 +58,12 @@ public class SoulLinkGoldChangeGameAction : GameAction
     {
     }
 
-    public override GameActionType ActionType
-        => SoulLinkMod.IsCombatActive() ? GameActionType.Combat : GameActionType.NonCombat;
+    // Always NonCombat: gold changes fire post-combat (rewards), in shops, in events.
+    // Typing as Combat causes the post-combat reward to be rejected by ActionQueueSet
+    // during its "cancelling all combat actions" window between IsInProgress=false and
+    // NCombatRoom._ExitTree (when IsCombatActive() still returns true via CombatRoomActive).
+    // In-combat gold changes (e.g. Gremlin Merchant steal) also work fine as NonCombat.
+    public override GameActionType ActionType => GameActionType.NonCombat;
 
     private ulong _ownerId;
     public void SetOwnerId(ulong id) => _ownerId = id;

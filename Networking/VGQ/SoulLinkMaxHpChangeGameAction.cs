@@ -27,16 +27,18 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
     public int DeltaMaxHp { get; private set; }
     public int PlayerSlot { get; private set; }
     public bool InCombat { get; private set; }
+    public int PlayerCount { get; private set; }
     public string? Source { get; private set; }
 
     /// <summary>
     /// Constructor for local action creation (host enqueueing the action).
     /// </summary>
-    public SoulLinkMaxHpChangeGameAction(int deltaMaxHp, int playerSlot, bool inCombat, string? source = null)
+    public SoulLinkMaxHpChangeGameAction(int deltaMaxHp, int playerSlot, bool inCombat, int playerCount, string? source = null)
     {
         DeltaMaxHp = deltaMaxHp;
         PlayerSlot = playerSlot;
         InCombat = inCombat;
+        PlayerCount = playerCount;
         Source = source;
         _ownerId = ResolveOwnerId(playerSlot);
     }
@@ -70,6 +72,7 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
             DeltaMaxHp = this.DeltaMaxHp,
             PlayerSlot = this.PlayerSlot,
             InCombat = this.InCombat,
+            PlayerCount = this.PlayerCount,
             Source = this.Source
         };
     }
@@ -107,14 +110,15 @@ public class SoulLinkMaxHpChangeGameAction : GameAction
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string combatStr = InCombat ? " [IN COMBAT]" : "";
-        GD.Print($"[SoulLink][VGQ] Apply MaxHP: slot={PlayerSlot} delta={DeltaMaxHp} poolBefore={SoulLinkSession.MaxHp}{sourceStr}{combatStr}");
+        GD.Print($"[SoulLink][VGQ] Apply MaxHP: slot={PlayerSlot} delta={DeltaMaxHp} pc={PlayerCount} poolBefore={SoulLinkSession.MaxHp}{sourceStr}{combatStr}");
 
-        int playerCount = runState.Players.Count;
-
-        // Use the originator's snapshotted InCombat flag (not local CombatManager state):
-        // peers may execute this action across a combat-state transition, and local
-        // re-evaluation diverges them. The originator's snapshot is authoritative.
-        SoulLinkSession.ApplyMaxHpDelta(DeltaMaxHp, InCombat, playerCount, PlayerSlot, Source);
+        // Use the originator's snapshotted PlayerCount and InCombat flag (not local state):
+        // peers may execute this action while their RunState.Players differs from the
+        // originator's (late joins, drops, or pre-init timing). Re-reading either value
+        // locally causes asymmetric scaling — e.g. host scales -12/2=-6 while client
+        // scales -12/3=-4 for the same Neow MaxHp loss. The originator's snapshot is
+        // authoritative for both apply semantics and queue eligibility.
+        SoulLinkSession.ApplyMaxHpDelta(DeltaMaxHp, InCombat, PlayerCount, PlayerSlot, Source);
         int canonicalMaxHp = SoulLinkSession.MaxHp;
         int canonicalHp = SoulLinkSession.CurrentHp;
 
@@ -148,11 +152,12 @@ public struct SoulLinkMaxHpChangeNetAction : MegaCrit.Sts2.Core.GameActions.Mult
     public int DeltaMaxHp { get; set; }
     public int PlayerSlot { get; set; }
     public bool InCombat { get; set; }
+    public int PlayerCount { get; set; }
     public string? Source { get; set; }
 
     public GameAction ToGameAction(MegaCrit.Sts2.Core.Entities.Players.Player player)
     {
-        return new SoulLinkMaxHpChangeGameAction(DeltaMaxHp, PlayerSlot, InCombat, Source);
+        return new SoulLinkMaxHpChangeGameAction(DeltaMaxHp, PlayerSlot, InCombat, PlayerCount, Source);
     }
 
     public void Serialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketWriter writer)
@@ -160,6 +165,7 @@ public struct SoulLinkMaxHpChangeNetAction : MegaCrit.Sts2.Core.GameActions.Mult
         writer.WriteInt(DeltaMaxHp, 32);
         writer.WriteInt(PlayerSlot, 8);
         writer.WriteBool(InCombat);
+        writer.WriteInt(PlayerCount, 8);
         if (Source != null)
         {
             writer.WriteBool(true);
@@ -176,6 +182,7 @@ public struct SoulLinkMaxHpChangeNetAction : MegaCrit.Sts2.Core.GameActions.Mult
         DeltaMaxHp = reader.ReadInt(32);
         PlayerSlot = reader.ReadInt(8);
         InCombat = reader.ReadBool();
+        PlayerCount = reader.ReadInt(8);
         bool hasSource = reader.ReadBool();
         Source = hasSource ? reader.ReadString() : null;
     }

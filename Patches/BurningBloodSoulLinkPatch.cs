@@ -19,6 +19,7 @@ public static class BurningBloodSoulLinkPatch
         if (!SoulLinkSession.IsActive) return;
         SoulLinkMod.SuppressVgqEnqueue = true;
         SoulLinkSession.PendingSource = "BurningBlood";
+        SoulLinkSession.PerPeerDeterministicHeal = true;
     }
 
     [HarmonyPostfix]
@@ -26,5 +27,6 @@ public static class BurningBloodSoulLinkPatch
     {
         if (!SoulLinkSession.IsActive) return;
         SoulLinkMod.SuppressVgqEnqueue = false;
+        SoulLinkSession.PerPeerDeterministicHeal = false;
     }
 }

@@ -95,6 +95,7 @@ public static class VGQSerializationTests
                 DeltaMaxHp = 10,
                 PlayerSlot = 0,
                 InCombat = false,
+                PlayerCount = 3,
                 Source = "BurningBlood"
             };
 
@@ -115,6 +116,7 @@ public static class VGQSerializationTests
             passed &= AssertEqual(original.DeltaMaxHp, deserialized.DeltaMaxHp, "DeltaMaxHp");
             passed &= AssertEqual(original.PlayerSlot, deserialized.PlayerSlot, "PlayerSlot");
             passed &= AssertEqual(original.InCombat, deserialized.InCombat, "InCombat");
+            passed &= AssertEqual(original.PlayerCount, deserialized.PlayerCount, "PlayerCount");
             passed &= AssertEqual(original.Source, deserialized.Source, "Source");
             passed &= AssertEqual(bitPosition, reader.BitPosition, "BitPosition (no data left)");
 

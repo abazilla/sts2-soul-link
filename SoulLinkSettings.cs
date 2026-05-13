@@ -47,7 +47,7 @@ public class SoulLinkSettings
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
     public bool ShowCombatLog    { get; set; } = true;
-    public bool ShowRunStats     { get; set; } = true;
+    public bool ShowRunStats     { get; set; } = false;
     public bool ShowDebugOverlay { get; set; } = false;
 
     // ── Helper ────────────────────────────────────────────────────────────────

@@ -81,6 +81,32 @@ public static class SoulLinkSession
     /// </summary>
     public static bool IsInitPhaseComplete => _initPhaseComplete;
 
+    internal static void MarkInitPhaseComplete() => _initPhaseComplete = true;
+
+    /// <summary>
+    /// Init-phase HP setter: overwrites canonical CurrentHp directly with the given value
+    /// (no delta math, no logging, no scaling). Used during the run-start window where
+    /// vanilla performs per-peer initialization writes (ascension scaling, character
+    /// setup, Neow setup) whose ordering and intermediate values are not knowable in
+    /// advance — trusting the final written value is more robust than tracking deltas.
+    /// </summary>
+    public static void OverwriteCanonicalHp(int value)
+    {
+        int v = Math.Max(0, value);
+        if (v > MaxHp) MaxHp = v;  // grow MaxHp lazily so HP write before MaxHp seed isn't clamped
+        CurrentHp = v;
+    }
+
+    /// <summary>
+    /// Init-phase MaxHp setter: overwrites canonical MaxHp directly. Clamps CurrentHp
+    /// if it now exceeds the new MaxHp.
+    /// </summary>
+    public static void OverwriteCanonicalMaxHp(int value)
+    {
+        MaxHp = Math.Max(1, value);
+        if (CurrentHp > MaxHp) CurrentHp = MaxHp;
+    }
+
     // HealInternal receives the unclamped heal amount before SetCurrentHpInternal clamps it
     // to MaxHp. We stash it here so ApplyHpDelta can scale the true intended heal rather
     // than the already-clamped delta that arrives via the CurrentHp setter.
@@ -91,6 +117,13 @@ public static class SoulLinkSession
     // Consumed (read + cleared) by HpSyncPatch / MaxHpSyncPatch / GoldSyncPatch when
     // building the LogEntry. Falls back to CurrentRoomSource, then a generic label.
     public static string? PendingSource { get; set; }
+
+    /// <summary>
+    /// True while a deterministic per-peer heal is firing (e.g. BurningBlood.AfterCombatVictory).
+    /// Each peer's relic fires locally, producing N CurrentHp setter calls. ApplyHpDelta scales
+    /// each by 1/playerCount so the total pool gain equals the relic's nominal value, not N×.
+    /// </summary>
+    public static bool PerPeerDeterministicHeal { get; set; }
 
     // Set when entering a room and cleared on exit. Used as a persistent source label
     // for the whole room (e.g. "Neow", "Rest Site", "Shop") so multi-step events
@@ -151,11 +184,11 @@ public static class SoulLinkSession
             }
         }
 
-        int sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
-
+        int sharedMaxHp;
         int sharedCurrentHp;
         if (isSaveLoad)
         {
+            sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
             sharedCurrentHp = RoundedAverage(runState.Players,
                 p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
             GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
@@ -163,9 +196,13 @@ public static class SoulLinkSession
         }
         else
         {
-            sharedCurrentHp = sharedMaxHp;
+            // Fresh run: leave canonical at 0/0. HpSyncPatch / MaxHpSyncPatch overwrite
+            // canonical from vanilla's first per-peer writes (character/ascension setup),
+            // avoiding the N× delta drain that would otherwise zero the pool.
+            sharedMaxHp = 0;
+            sharedCurrentHp = 0;
             _initPhaseComplete = false;
-            GD.Print($"[SoulLink] Fresh run — init phase active. MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp} (Neow will adjust to ascension-scaled value).");
+            GD.Print("[SoulLink] Fresh run — canonical pool deferred; will seed from vanilla's first HP writes.");
         }
 
         // Determine which run settings to use.
@@ -228,8 +265,10 @@ public static class SoulLinkSession
             TotalGoldSpent     = 0;
         }
 
-        // Write canonical values before activating so no patch intercepts the initial write.
-        ApplyToAllPlayers(runState);
+        // Save-load: write canonical back to all creatures so vanilla picks up restored state.
+        // Fresh run: skip — canonical is 0/0 and patches will seed from vanilla's writes.
+        if (isSaveLoad)
+            ApplyToAllPlayers(runState);
         IsActive = true;
     }
 
@@ -246,6 +285,7 @@ public static class SoulLinkSession
         _pendingHpClamp           = 0;
         _initPhaseComplete        = false;
         PendingSource             = null;
+        PerPeerDeterministicHeal  = false;
         CurrentRoomSource         = null;
         ActiveRunSettings         = default;
         PendingSyncedRunSettings  = null;
@@ -289,7 +329,17 @@ public static class SoulLinkSession
         // From this point on, campfire/event heals fire once per player and must be scaled.
         if (inCombat) _initPhaseComplete = true;
 
-        if (delta > 0 && !inCombat)
+        // Per-peer deterministic heal (e.g. BurningBlood): fires playerCount times,
+        // once per peer. Scale each occurrence by 1/playerCount so the pool receives
+        // the nominal heal value, not playerCount × it. Applies in or out of combat.
+        if (PerPeerDeterministicHeal
+            && delta > 0
+            && playerCount > 1
+            && ActiveRunSettings.SplitHeal)
+        {
+            delta = Math.Max(1, (int)Math.Round((double)rawDelta / playerCount, MidpointRounding.AwayFromZero));
+        }
+        else if (delta > 0 && !inCombat)
         {
             if (pendingHeal > 0 && rawDelta == pendingHeal)
             {
@@ -314,6 +364,17 @@ public static class SoulLinkSession
                 delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
             }
             // If !_initPhaseComplete: Neow/initialization heal — apply in full.
+        }
+        else if (delta > 0 && inCombat
+                 && _initPhaseComplete
+                 && playerCount > 1
+                 && ActiveRunSettings.SplitHeal)
+        {
+            // In-combat heal (Blood Potion, NOT_YET, etc.): fires once per peer on the
+            // triggering player's creature. Scale by 1/playerCount so all peers converge
+            // on the same scaled canonical pool gain.
+            int baseForScaling = unclampedHeal > 0 ? unclampedHeal : rawDelta;
+            delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
         }
 
         CurrentHp = Math.Clamp(CurrentHp + delta, 0, MaxHp);
@@ -522,17 +583,33 @@ public static class SoulLinkSession
     {
         try
         {
-            var net = RunManager.Instance?.NetService;
-            if (net == null || !net.IsConnected) return;
             var s = SoulLinkSettings.Instance;
-            net.SendMessage(new SoulLinkSettingsSyncMessage
+            var msg = new SoulLinkSettingsSyncMessage
             {
                 SplitMaxHp   = s.SplitMaxHp,
                 SplitHeal    = s.SplitHeal,
                 GoldMode     = (int)s.GoldMode,
                 SharedLoseHp = s.SharedLoseHp,
                 HpMode       = (int)s.HpMode,
-            });
+            };
+
+            var net = RunManager.Instance?.NetService;
+            if (net != null && net.IsConnected)
+            {
+                GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: SENDING via run net#{net.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                net.SendMessage(msg);
+                return;
+            }
+
+            if (Patches.LobbyNetCapture.IsAvailable)
+            {
+                GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: SENDING via lobby net#{Patches.LobbyNetCapture.Service!.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                Patches.LobbyNetCapture.TrySend(msg);
+                return;
+            }
+
+            if (net == null) GD.Print("[SoulLink][SyncDiag] TrySendSettingsSync: net=null, lobby=null, skipping.");
+            else GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: net.IsConnected=false (net#{net.GetHashCode()}), lobby=null, skipping.");
         }
         catch (Exception ex)
         {

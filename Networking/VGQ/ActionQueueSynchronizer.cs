@@ -61,10 +61,10 @@ public static class ActionQueueSynchronizer
     /// <summary>
     /// Convenience method for enqueueing MaxHP change actions.
     /// </summary>
-    public static void RequestEnqueueMaxHpChange(int deltaMaxHp, int playerSlot, bool inCombat, string? source = null)
+    public static void RequestEnqueueMaxHpChange(int deltaMaxHp, int playerSlot, bool inCombat, int playerCount, string? source = null)
     {
         if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
-        RequestEnqueue(new SoulLinkMaxHpChangeGameAction(deltaMaxHp, playerSlot, inCombat, source));
+        RequestEnqueue(new SoulLinkMaxHpChangeGameAction(deltaMaxHp, playerSlot, inCombat, playerCount, source));
     }
 
     /// <summary>

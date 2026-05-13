@@ -39,6 +39,7 @@ public class CombatLogPanel : Control
     private const string HexBlocked   = "808080";
     private const string HexSource    = "ffffff";
     private const string HexHeader    = "999999";
+    private static readonly Color ColorAccentYellow = new Color("efc851");
 
     private RichTextLabel? _label;
 
@@ -68,6 +69,7 @@ public class CombatLogPanel : Control
             _toggleButton = new Button { Text = "Soul Link Feed v" };
             _toggleButton.Pressed += OnToggle;
             ApplyHeaderButtonStyle(_toggleButton);
+            ApplyHeaderTextStyle(_toggleButton);
             SoulLinkFont.Apply(_toggleButton);
             vbox.AddChild(_toggleButton);
 
@@ -82,6 +84,9 @@ public class CombatLogPanel : Control
             };
             _label.CustomMinimumSize = new Vector2(PanelW, MaxVisible * LineHeight);
             _label.AddThemeFontSizeOverride("normal_font_size", 15);
+            _label.AddThemeConstantOverride("shadow_offset_x", 1);
+            _label.AddThemeConstantOverride("shadow_offset_y", 1);
+            _label.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.85f));
             SoulLinkFont.Apply(_label);
             vbox.AddChild(_label);
 
@@ -162,6 +167,21 @@ public class CombatLogPanel : Control
         btn.AddThemeStyleboxOverride("focus",    empty);
         btn.AddThemeStyleboxOverride("disabled", empty);
     }
+
+    private static void ApplyHeaderTextStyle(Control c)
+    {
+        var hover = Lighten(ColorAccentYellow, 0.4f);
+        c.AddThemeColorOverride("font_color",                ColorAccentYellow);
+        c.AddThemeColorOverride("font_hover_color",          hover);
+        c.AddThemeColorOverride("font_hover_pressed_color",  hover);
+        c.AddThemeColorOverride("font_pressed_color",        hover);
+        c.AddThemeColorOverride("font_focus_color",          ColorAccentYellow);
+        c.AddThemeConstantOverride("outline_size", 6);
+        c.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
+    }
+
+    private static Color Lighten(Color c, float t) =>
+        new Color(c.R + (1f - c.R) * t, c.G + (1f - c.G) * t, c.B + (1f - c.B) * t, c.A);
 
     // ── Formatting ────────────────────────────────────────────────────────────
 

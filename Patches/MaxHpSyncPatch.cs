@@ -54,6 +54,35 @@ public static class MaxHpSyncPatch
         bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;
 
+        // Init-phase overwrite path (mirrors HpSyncPatch). See HpSyncPatch for rationale.
+        if (!SoulLinkSession.IsInitPhaseComplete && !inCombat)
+        {
+            SoulLinkSession.OverwriteCanonicalMaxHp(value);
+            int canonicalMax = SoulLinkSession.MaxHp;
+            int canonicalCur = SoulLinkSession.CurrentHp;
+            value = canonicalMax;
+            SoulLinkMod.ApplyingCanonical = true;
+            try
+            {
+                foreach (var player in runState.Players)
+                {
+                    if (player.Creature != __instance)
+                    {
+                        player.Creature.SetMaxHp(canonicalMax);
+                        player.Creature.SetCurrentHp(canonicalCur);
+                    }
+                }
+            }
+            finally { SoulLinkMod.ApplyingCanonical = false; }
+            CombatLogPanel.Current?.Refresh();
+            RunStatsPanel.Current?.Refresh();
+            DebugOverlay.Current?.Refresh();
+            return true;
+        }
+
+        if (inCombat && !SoulLinkSession.IsInitPhaseComplete)
+            SoulLinkSession.MarkInitPhaseComplete();
+
         string? source = SoulLinkSession.PendingSource
             ?? SoulLinkSession.CurrentRoomSource
             ?? (inCombat ? "Combat" : "Out of combat");
@@ -69,13 +98,25 @@ public static class MaxHpSyncPatch
         {
             if (isLocalPlayer)
             {
-                ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, source);
+                ActionQueueSynchronizer.RequestEnqueueMaxHpChange(delta, playerSlot, inCombat, playerCount, source);
             }
-            // Block vanilla setter on every peer. VGQ ExecuteAction runs synchronously
-            // inside RequestEnqueue on the originator and has already mirrored the
-            // canonical to all creatures (including this one) under ApplyingCanonical.
-            // Letting vanilla resume would overwrite the canonical with the raw value.
-            return false;
+            // Let vanilla setter pass through. `runManager.ActionQueueSynchronizer.RequestEnqueue`
+            // is asynchronous (vanilla GameAction queue dispatches the action later), so blocking
+            // the setter here would leave creature.MaxHp stale and break callers that read it back
+            // synchronously — notably CreatureCmd.SetMaxHp -> `newMaxHp - oldMaxHp` -> Heal(num).
+            // With num always 0, every GainMaxHp caller (Pear, Mango, Strawberry, Feed, Cook, etc.)
+            // silently lost its bundled heal.
+            //
+            // Passing through writes the raw new value to this creature; the subsequent
+            // ExecuteAction will overwrite all creatures with the canonical pool value
+            // (idempotent for shared pool; brief skew under SplitMaxHp until apply).
+            //
+            // Side effect — LeesWaffle double-heals: it calls GainMaxHp (now heals via
+            // pass-through) then explicitly `Heal(creature, MaxHp - CurrentHp)`. The
+            // second heal reads stale creature.CurrentHp (HpSyncPatch blocks the local
+            // write) and heals the full gap again. Net effect: still heal-to-full, since
+            // pool clamps at MaxHp. No visible difference. Acceptable.
+            return true;
         }
 
         // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup)

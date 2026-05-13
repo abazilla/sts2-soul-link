@@ -21,7 +21,9 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
     /// <summary>Cast of <see cref="HpMode"/> — serialized as int for wire format. Defaults to SharedPool if absent (old peer).</summary>
     public int HpMode;
 
-    public bool ShouldBroadcast => false;
+    // Host -> all clients. Must be true so multi-client lobbies receive the sync on every peer,
+    // not just one. Receiver guards against self-apply when running on the host.
+    public bool ShouldBroadcast => true;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 
