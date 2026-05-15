@@ -8,6 +8,8 @@ using SoulLinkMod.Actions;
 using SoulLinkMod.UI;
 using SoulLinkMod.VGQ;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -49,7 +51,7 @@ public static class MaxHpSyncPatch
         if (delta == 0) return true;
 
         bool isLocalPlayer = LocalContext.IsMe(runState.Players[playerSlot]);
-        Godot.GD.Print($"[SoulLink][MaxHpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.MaxHp}");
+        SoulLinkLog.Debug($"[MaxHpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.MaxHp}");
 
         bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;

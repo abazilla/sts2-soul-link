@@ -25,20 +25,20 @@ public static class NetActionService
     internal static void RegisterActionHandler<T>(Action<T, ulong> handler) where T : struct, INetAction
     {
         _handlers[typeof(T)] = handler;
-        GD.Print($"[NetActionService] Registered handler for {typeof(T).Name}");
+        SoulLinkLog.Debug($"[NetActionService] Registered handler for {typeof(T).Name}");
     }
 
     internal static void UnregisterActionHandler<T>() where T : struct, INetAction
     {
         _handlers.Remove(typeof(T));
-        GD.Print($"[NetActionService] Unregistered handler for {typeof(T).Name}");
+        SoulLinkLog.Debug($"[NetActionService] Unregistered handler for {typeof(T).Name}");
     }
 
     public static void EnqueueLocalAction<T>(T action, int playerSlot = -1) where T : struct, INetAction
     {
         if (_executingAction)
         {
-            GD.PrintErr($"[NetActionService] Re-entrancy detected while executing action. Skipping {typeof(T).Name}");
+            SoulLinkLog.Error($"[NetActionService] Re-entrancy detected while executing action. Skipping {typeof(T).Name}");
             return;
         }
 
@@ -88,7 +88,7 @@ public static class NetActionService
                 break;
 
             default:
-                GD.PrintErr($"[NetActionService] Unknown action type: {typeof(T).Name}. Cannot broadcast.");
+                SoulLinkLog.Error($"[NetActionService] Unknown action type: {typeof(T).Name}. Cannot broadcast.");
                 break;
         }
     }
@@ -99,7 +99,7 @@ public static class NetActionService
         if (_executingAction)
         {
             _pendingMessages.Enqueue(() => ExecuteRemoteAction(action, timestamp, playerSlot));
-            GD.Print($"[NetActionService] Queued {typeof(T).Name} during action execution (queue size: {_pendingMessages.Count})");
+            SoulLinkLog.Debug($"[NetActionService] Queued {typeof(T).Name} during action execution (queue size: {_pendingMessages.Count})");
             return;
         }
 
@@ -112,7 +112,7 @@ public static class NetActionService
         if (_pendingMessages.Count == 0)
             return;
 
-        GD.Print($"[NetActionService] Draining {_pendingMessages.Count} queued messages");
+        SoulLinkLog.Debug($"[NetActionService] Draining {_pendingMessages.Count} queued messages");
 
         while (_pendingMessages.Count > 0)
         {
@@ -132,7 +132,7 @@ public static class NetActionService
             // Check if feature is enabled before execution
             if (!FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
             {
-                GD.Print($"[NetActionService] NetworkedActions flag disabled. Skipping {typeof(T).Name}");
+                SoulLinkLog.Debug($"[NetActionService] NetworkedActions flag disabled. Skipping {typeof(T).Name}");
                 return;
             }
 
@@ -143,12 +143,12 @@ public static class NetActionService
 
             if (action.LogLevel >= LogLevel.Debug)
             {
-                GD.Print($"[NetActionService] Executed {typeof(T).Name} (local={isLocal}, slot={context.OriginatingPlayerSlot})");
+                SoulLinkLog.Debug($"[NetActionService] Executed {typeof(T).Name} (local={isLocal}, slot={context.OriginatingPlayerSlot})");
             }
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[NetActionService] Error executing {typeof(T).Name}: {ex}");
+            SoulLinkLog.Error($"[NetActionService] Error executing {typeof(T).Name}: {ex}");
             DumpHistory($"Exception in {typeof(T).Name}");
         }
         finally
@@ -169,8 +169,8 @@ public static class NetActionService
 
     public static void DumpHistory(string reason)
     {
-        GD.PrintErr($"[SoulLink][HISTORY DUMP] Reason: {reason}");
-        GD.PrintErr($"[SoulLink][HISTORY DUMP] {_history.Count} actions:");
+        SoulLinkLog.Error($"[HISTORY DUMP] Reason: {reason}");
+        SoulLinkLog.Error($"[HISTORY DUMP] {_history.Count} actions:");
         int i = 0;
         foreach (var (action, ctx) in _history)
         {
@@ -186,7 +186,7 @@ public static class NetActionService
                 _ => action.ToString() ?? type
             };
 
-            GD.PrintErr($"  [{i++}] {type} {local} {slot}: {details}");
+            SoulLinkLog.Error($"  [{i++}] {type} {local} {slot}: {details}");
         }
     }
 
@@ -198,6 +198,6 @@ public static class NetActionService
         _executingAction = false;
         _pendingMessages.Clear();
         SyncCoordinator.Reset();
-        GD.Print("[NetActionService] Reset");
+        SoulLinkLog.Debug("[NetActionService] Reset");
     }
 }

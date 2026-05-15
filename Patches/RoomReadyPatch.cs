@@ -6,6 +6,8 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -65,7 +67,7 @@ public static class NonCombatRoomReadyPatch
             var type = AccessTools.TypeByName($"{ns}.{name}");
             if (type == null)
             {
-                GD.PrintErr($"[SoulLink] Room type {name} not found — panels won't appear there.");
+                SoulLinkLog.Error($"Room type {name} not found — panels won't appear there.");
                 continue;
             }
             var m = AccessTools.Method(type, "_Ready");
@@ -129,7 +131,7 @@ internal static class RoomPanelInjector
                 SharedLoseHp = rs.SharedLoseHp,
                 HpMode       = (int)rs.HpMode,
             });
-            GD.Print("[SoulLink] Re-sent settings sync from host at room entry.");
+            SoulLinkLog.Debug("Re-sent settings sync from host at room entry.");
         }
 
         // Panel visibility is a LOCAL setting — each player shows/hides their own panels

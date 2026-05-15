@@ -5,6 +5,8 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Actions;
 
 public struct GoldChangeAction : INetAction
@@ -55,19 +57,19 @@ public struct GoldChangeAction : INetAction
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.PrintErr($"[SoulLink][GoldChangeAction] Execute failed: no run state");
+            SoulLinkLog.Error($"[GoldChangeAction] Execute failed: no run state");
             return;
         }
 
         if (PlayerSlot < 0 || PlayerSlot >= runState.Players.Count)
         {
-            GD.PrintErr($"[SoulLink][GoldChangeAction] Execute failed: invalid player slot {PlayerSlot}");
+            SoulLinkLog.Error($"[GoldChangeAction] Execute failed: invalid player slot {PlayerSlot}");
             return;
         }
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string blockedStr = WasBlocked ? " [BLOCKED]" : "";
-        GD.Print($"[SoulLink][GoldChangeAction] Execute: player={PlayerSlot} delta={DeltaGold}{sourceStr}{blockedStr} isLocal={context.IsLocal}");
+        SoulLinkLog.Debug($"[GoldChangeAction] Execute: player={PlayerSlot} delta={DeltaGold}{sourceStr}{blockedStr} isLocal={context.IsLocal}");
 
         if (WasBlocked)
             return;
@@ -76,7 +78,7 @@ public struct GoldChangeAction : INetAction
         // Only remote machines need to apply the delta through this action.
         if (context.IsLocal)
         {
-            GD.Print($"[SoulLink][GoldChangeAction] Skipping local execution (already applied by patch)");
+            SoulLinkLog.Debug($"[GoldChangeAction] Skipping local execution (already applied by patch)");
             return;
         }
 

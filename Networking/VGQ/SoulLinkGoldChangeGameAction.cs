@@ -9,6 +9,8 @@ using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.VGQ;
 
 /// <summary>
@@ -97,7 +99,7 @@ public class SoulLinkGoldChangeGameAction : GameAction
         await System.Threading.Tasks.Task.CompletedTask;
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
         {
-            GD.PrintErr("[SoulLink][VGQ] SoulLinkGoldChangeGameAction executed but UseVGQSync is disabled");
+            SoulLinkLog.Error("[VGQ] SoulLinkGoldChangeGameAction executed but UseVGQSync is disabled");
             return;
         }
 
@@ -109,18 +111,18 @@ public class SoulLinkGoldChangeGameAction : GameAction
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.PrintErr($"[SoulLink][VGQ] Apply failed: no run state");
+            SoulLinkLog.Error($"[VGQ] Apply failed: no run state");
             return;
         }
 
         if (PlayerSlot < 0 || PlayerSlot >= runState.Players.Count)
         {
-            GD.PrintErr($"[SoulLink][VGQ] Apply failed: invalid player slot {PlayerSlot}");
+            SoulLinkLog.Error($"[VGQ] Apply failed: invalid player slot {PlayerSlot}");
             return;
         }
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
-        GD.Print($"[SoulLink][VGQ] Apply Gold: slot={PlayerSlot} delta={DeltaGold} mode={Mode} poolBefore={SoulLinkSession.Gold}{sourceStr}");
+        SoulLinkLog.Debug($"[VGQ] Apply Gold: slot={PlayerSlot} delta={DeltaGold} mode={Mode} poolBefore={SoulLinkSession.Gold}{sourceStr}");
 
         // Apply the delta to the shared or split gold pool based on mode
         int canonicalGold = 0;

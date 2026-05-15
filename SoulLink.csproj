@@ -12,6 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Dev-only tests; excluded from release build. Set IncludeTests=true to compile. -->
+    <Compile Remove="Tests/**" Condition="'$(IncludeTests)' != 'true'" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="sts2">
       <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\sts2.dll</HintPath>
       <Private>false</Private>

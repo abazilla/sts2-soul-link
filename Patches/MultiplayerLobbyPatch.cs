@@ -3,6 +3,8 @@ using Godot;
 using HarmonyLib;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -234,7 +236,7 @@ internal static class LobbyPanelInjector
         }
         catch (System.Exception ex)
         {
-            GD.PrintErr($"[SoulLink] LobbyPanelInjector.InjectPanel crashed: {ex}");
+            SoulLinkLog.Error($"LobbyPanelInjector.InjectPanel crashed: {ex}");
         }
     }
 }

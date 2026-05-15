@@ -1,6 +1,8 @@
 using System;
 using Godot;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -81,7 +83,7 @@ public class SoulLinkSettingsPanel : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] SoulLinkSettingsPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"SoulLinkSettingsPanel.Initialize crashed: {ex}");
         }
     }
 
@@ -94,7 +96,7 @@ public class SoulLinkSettingsPanel : Control
         _isClientMode = !isHost;
         Visible = true;
         Refresh();
-        GD.Print($"[SoulLink][SyncDiag] Panel.Show isHost={isHost}");
+        SoulLinkLog.Debug($"[SyncDiag] Panel.Show isHost={isHost}");
         // Notify connected clients of current host settings as soon as the lobby is ready.
         if (isHost) SoulLinkSession.TrySendSettingsSync();
     }
@@ -106,7 +108,7 @@ public class SoulLinkSettingsPanel : Control
     public void Refresh()
     {
         try { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] SoulLinkSettingsPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"SoulLinkSettingsPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;
@@ -165,7 +167,7 @@ public class SoulLinkSettingsPanel : Control
         {
             if (_refreshing) return;
             var mode = (HpMode)_hpModeOption.GetItemId((int)idx);
-            GD.Print($"[SoulLink][SyncDiag] Toggled HpMode={mode} isClient={_isClientMode}");
+            SoulLinkLog.Debug($"[SyncDiag] Toggled HpMode={mode} isClient={_isClientMode}");
             if (mode == HpMode.SharedBlockSharedPool) { DoRefresh(); return; } // revert
             SoulLinkSettings.Instance.HpMode = mode;
             SoulLinkSettings.Save();
@@ -178,14 +180,14 @@ public class SoulLinkSettingsPanel : Control
         vbox.AddChild(WrapDescriptor(_descHpMode));
 
         _cbSplitMaxHp = MakeCheckBox("Split MaxHP changes by players");
-        _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; GD.Print($"[SoulLink][SyncDiag] Toggled SplitMaxHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitMaxHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(Indent(_cbSplitMaxHp));
         _descSplitMaxHp = MakeRichDescriptor(
             $"eg [color=#{ColHpGreen.ToHtml(false)}]+10 MaxHP[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5 MaxHP[/color] to the MaxHP pool (for 2 players)");
         vbox.AddChild(WrapDescriptorControl(_descSplitMaxHp));
 
         _cbSplitHeal = MakeCheckBox("Split healing by players");
-        _cbSplitHeal.Toggled += on => { if (_refreshing) return; GD.Print($"[SoulLink][SyncDiag] Toggled SplitHeal={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        _cbSplitHeal.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitHeal={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(Indent(_cbSplitHeal));
         _descSplitHeal = MakeRichDescriptor(
             $"eg [color=#{ColHpGreen.ToHtml(false)}]+10[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] to the shared HP pool (for 2 players)");
@@ -206,7 +208,7 @@ public class SoulLinkSettingsPanel : Control
         {
             if (_refreshing) return;
             var mode = (GoldSharingMode)_goldModeOption.GetItemId((int)idx);
-            GD.Print($"[SoulLink][SyncDiag] Toggled GoldMode={mode} isClient={_isClientMode}");
+            SoulLinkLog.Debug($"[SyncDiag] Toggled GoldMode={mode} isClient={_isClientMode}");
             SoulLinkSettings.Instance.GoldMode = mode;
             SoulLinkSettings.Save();
             if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
@@ -221,7 +223,7 @@ public class SoulLinkSettingsPanel : Control
 
         // Turning this off - only valid for legacy networking, already works for VGQ
         // _cbSharedLoseHp = MakeCheckBox("Shared lose-HP effects");
-        // _cbSharedLoseHp.Toggled += on => { GD.Print($"[SoulLink][SyncDiag] Toggled SharedLoseHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SharedLoseHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        // _cbSharedLoseHp.Toggled += on => { SoulLinkLog.Debug($"[SyncDiag] Toggled SharedLoseHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SharedLoseHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         // vbox.AddChild(_cbSharedLoseHp);
 
         // ── Panel Settings ────────────────────────────────────────────────────
@@ -252,7 +254,7 @@ public class SoulLinkSettingsPanel : Control
     {
         bool runActive   = SoulLinkSession.IsActive;
         bool runEditable = !_isClientMode && !runActive;
-        GD.Print($"[SoulLink][SyncDiag] DoRefreshInner: isClient={_isClientMode} runActive={runActive} pending={SoulLinkSession.PendingSyncedRunSettings.HasValue}");
+        SoulLinkLog.Debug($"[SyncDiag] DoRefreshInner: isClient={_isClientMode} runActive={runActive} pending={SoulLinkSession.PendingSyncedRunSettings.HasValue}");
 
         // Decide which values to display:
         // - Client during active run: show locked ActiveRunSettings from host.
@@ -508,7 +510,7 @@ public class SoulLinkSettingsPanel : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] BuildOutlinedIcon failed: {ex.Message}");
+            SoulLinkLog.Error($"BuildOutlinedIcon failed: {ex.Message}");
             return null;
         }
     }

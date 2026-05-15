@@ -3,6 +3,8 @@ using Godot;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using SoulLinkMod.VGQ;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Tests;
 
 /// <summary>
@@ -13,7 +15,7 @@ public static class VGQSerializationTests
 {
     public static void RunAll()
     {
-        GD.Print("[VGQSerializationTests] Starting all serialization round-trip tests...");
+        SoulLinkLog.Debug("[VGQSerializationTests] Starting all serialization round-trip tests...");
 
         bool allPassed = true;
         allPassed &= TestHpChangeNetAction();
@@ -22,17 +24,17 @@ public static class VGQSerializationTests
 
         if (allPassed)
         {
-            GD.Print("[VGQSerializationTests] ✓ ALL TESTS PASSED");
+            SoulLinkLog.Debug("[VGQSerializationTests] ✓ ALL TESTS PASSED");
         }
         else
         {
-            GD.PrintErr("[VGQSerializationTests] ✗ SOME TESTS FAILED");
+            SoulLinkLog.Error("[VGQSerializationTests] ✗ SOME TESTS FAILED");
         }
     }
 
     public static bool TestHpChangeNetAction()
     {
-        GD.Print("[VGQSerializationTests] Testing SoulLinkHpChangeNetAction serialization...");
+        SoulLinkLog.Debug("[VGQSerializationTests] Testing SoulLinkHpChangeNetAction serialization...");
 
         try
         {
@@ -67,25 +69,25 @@ public static class VGQSerializationTests
 
             if (passed)
             {
-                GD.Print("[VGQSerializationTests]   ✓ SoulLinkHpChangeNetAction PASSED");
+                SoulLinkLog.Debug("[VGQSerializationTests]   ✓ SoulLinkHpChangeNetAction PASSED");
             }
             else
             {
-                GD.PrintErr("[VGQSerializationTests]   ✗ SoulLinkHpChangeNetAction FAILED");
+                SoulLinkLog.Error("[VGQSerializationTests]   ✗ SoulLinkHpChangeNetAction FAILED");
             }
 
             return passed;
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
+            SoulLinkLog.Error($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
             return false;
         }
     }
 
     public static bool TestMaxHpChangeNetAction()
     {
-        GD.Print("[VGQSerializationTests] Testing SoulLinkMaxHpChangeNetAction serialization...");
+        SoulLinkLog.Debug("[VGQSerializationTests] Testing SoulLinkMaxHpChangeNetAction serialization...");
 
         try
         {
@@ -122,25 +124,25 @@ public static class VGQSerializationTests
 
             if (passed)
             {
-                GD.Print("[VGQSerializationTests]   ✓ SoulLinkMaxHpChangeNetAction PASSED");
+                SoulLinkLog.Debug("[VGQSerializationTests]   ✓ SoulLinkMaxHpChangeNetAction PASSED");
             }
             else
             {
-                GD.PrintErr("[VGQSerializationTests]   ✗ SoulLinkMaxHpChangeNetAction FAILED");
+                SoulLinkLog.Error("[VGQSerializationTests]   ✗ SoulLinkMaxHpChangeNetAction FAILED");
             }
 
             return passed;
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
+            SoulLinkLog.Error($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
             return false;
         }
     }
 
     public static bool TestGoldChangeNetAction()
     {
-        GD.Print("[VGQSerializationTests] Testing SoulLinkGoldChangeNetAction serialization...");
+        SoulLinkLog.Debug("[VGQSerializationTests] Testing SoulLinkGoldChangeNetAction serialization...");
 
         try
         {
@@ -199,18 +201,18 @@ public static class VGQSerializationTests
 
             if (passed)
             {
-                GD.Print("[VGQSerializationTests]   ✓ SoulLinkGoldChangeNetAction PASSED");
+                SoulLinkLog.Debug("[VGQSerializationTests]   ✓ SoulLinkGoldChangeNetAction PASSED");
             }
             else
             {
-                GD.PrintErr("[VGQSerializationTests]   ✗ SoulLinkGoldChangeNetAction FAILED");
+                SoulLinkLog.Error("[VGQSerializationTests]   ✗ SoulLinkGoldChangeNetAction FAILED");
             }
 
             return passed;
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
+            SoulLinkLog.Error($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
             return false;
         }
     }
@@ -220,7 +222,7 @@ public static class VGQSerializationTests
         bool equal = expected == null ? actual == null : expected.Equals(actual);
         if (!equal)
         {
-            GD.PrintErr($"[VGQSerializationTests]     MISMATCH {fieldName}: expected={expected}, actual={actual}");
+            SoulLinkLog.Error($"[VGQSerializationTests]     MISMATCH {fieldName}: expected={expected}, actual={actual}");
         }
         return equal;
     }

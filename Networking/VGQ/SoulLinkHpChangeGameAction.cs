@@ -9,6 +9,8 @@ using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.VGQ;
 
 /// <summary>
@@ -89,7 +91,7 @@ public class SoulLinkHpChangeGameAction : GameAction
         await System.Threading.Tasks.Task.CompletedTask;
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
         {
-            GD.PrintErr("[SoulLink][VGQ] SoulLinkHpChangeGameAction executed but UseVGQSync is disabled");
+            SoulLinkLog.Error("[VGQ] SoulLinkHpChangeGameAction executed but UseVGQSync is disabled");
             return;
         }
 
@@ -101,19 +103,19 @@ public class SoulLinkHpChangeGameAction : GameAction
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.PrintErr($"[SoulLink][VGQ] Apply failed: no run state");
+            SoulLinkLog.Error($"[VGQ] Apply failed: no run state");
             return;
         }
 
         if (PlayerSlot < 0 || PlayerSlot >= runState.Players.Count)
         {
-            GD.PrintErr($"[SoulLink][VGQ] Apply failed: invalid player slot {PlayerSlot}");
+            SoulLinkLog.Error($"[VGQ] Apply failed: invalid player slot {PlayerSlot}");
             return;
         }
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string combatStr = InCombat ? " [IN COMBAT]" : "";
-        GD.Print($"[SoulLink][VGQ] Apply: slot={PlayerSlot} delta={DeltaHp} poolBefore={SoulLinkSession.CurrentHp}{sourceStr}{combatStr}");
+        SoulLinkLog.Debug($"[VGQ] Apply: slot={PlayerSlot} delta={DeltaHp} poolBefore={SoulLinkSession.CurrentHp}{sourceStr}{combatStr}");
 
         int playerCount = runState.Players.Count;
 

@@ -32,8 +32,6 @@ Requirements:
 - Slay the Spire 2
 - .NET 9.0 SDK
 
-## Building
-
 Save the below code to a file named `Local.props` to set your STS2 path for building:
 
 ```xml
@@ -52,6 +50,14 @@ dotnet build
 
 ## Other
 
-- The latest release (v0.1.0) is NOT what's currently in main as of 23/04/26
 - This is a project to help familiarise myself with some AI coding tools
 - Check out the STS2 modding discord for more!
+
+## Credits
+
+- [HarmonyLib](https://github.com/pardeike/Harmony) by Andreas Pardeike — runtime patching used throughout the mod
+- [sts2-modding-mcp](https://github.com/elliotttate/sts2-modding-mcp) by elliotttate — MCP server used during development
+
+## License
+
+MIT — see [LICENSE](LICENSE).

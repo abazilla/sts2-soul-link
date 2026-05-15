@@ -1,6 +1,8 @@
 using System;
 using Godot;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -59,14 +61,14 @@ public class RunStatsPanel : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] RunStatsPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"RunStatsPanel.Initialize crashed: {ex}");
         }
     }
 
     public void Refresh()
     {
         try   { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] RunStatsPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"RunStatsPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;

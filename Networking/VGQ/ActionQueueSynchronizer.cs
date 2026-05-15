@@ -2,6 +2,8 @@ using Godot;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Runs;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.VGQ;
 
 /// <summary>
@@ -28,14 +30,14 @@ public static class ActionQueueSynchronizer
     {
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync))
         {
-            GD.PrintErr("[SoulLink][VGQ] RequestEnqueue called but UseVGQSync is disabled");
+            SoulLinkLog.Error("[VGQ] RequestEnqueue called but UseVGQSync is disabled");
             return;
         }
 
         var runManager = RunManager.Instance;
         if (runManager == null)
         {
-            GD.PrintErr("[SoulLink][VGQ] RequestEnqueue failed: RunManager.Instance is null");
+            SoulLinkLog.Error("[VGQ] RequestEnqueue failed: RunManager.Instance is null");
             return;
         }
 
@@ -46,7 +48,7 @@ public static class ActionQueueSynchronizer
         // - Queue ordering guarantees
         runManager.ActionQueueSynchronizer.RequestEnqueue(action);
 
-        GD.Print($"[SoulLink][VGQ] Enqueued {action.GetType().Name} to vanilla action queue");
+        SoulLinkLog.Debug($"[VGQ] Enqueued {action.GetType().Name} to vanilla action queue");
     }
 
     /// <summary>

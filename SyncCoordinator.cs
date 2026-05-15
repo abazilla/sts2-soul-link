@@ -37,7 +37,7 @@ public static class SyncCoordinator
             {
                 if (TryConsume(_hpCancellations, slot, delta))
                 {
-                    GD.Print($"[SyncCoordinator] HP delta already applied locally, skipping network: slot={slot} delta={delta}");
+                    SoulLinkLog.Debug($"[SyncCoordinator] HP delta already applied locally, skipping network: slot={slot} delta={delta}");
                     return null;
                 }
             }
@@ -45,7 +45,7 @@ public static class SyncCoordinator
             {
                 if (TryConsume(_hpNetworkApplied, slot, delta))
                 {
-                    GD.Print($"[SyncCoordinator] HP delta already applied by network, redirecting: slot={slot} delta={delta}");
+                    SoulLinkLog.Debug($"[SyncCoordinator] HP delta already applied by network, redirecting: slot={slot} delta={delta}");
                     return SoulLinkSession.CurrentHp;
                 }
             }
@@ -59,7 +59,7 @@ public static class SyncCoordinator
             else
                 Enqueue(_hpCancellations, slot, delta);
 
-            GD.Print($"[SyncCoordinator] HP applied: slot={slot} delta={delta} isNetwork={isFromNetwork} canonical={canonical}");
+            SoulLinkLog.Debug($"[SyncCoordinator] HP applied: slot={slot} delta={delta} isNetwork={isFromNetwork} canonical={canonical}");
             return canonical;
         }
     }
@@ -77,7 +77,7 @@ public static class SyncCoordinator
             {
                 if (TryConsume(_maxHpCancellations, slot, delta))
                 {
-                    GD.Print($"[SyncCoordinator] MaxHP delta already applied locally, skipping network: slot={slot} delta={delta}");
+                    SoulLinkLog.Debug($"[SyncCoordinator] MaxHP delta already applied locally, skipping network: slot={slot} delta={delta}");
                     return false;
                 }
             }
@@ -85,7 +85,7 @@ public static class SyncCoordinator
             {
                 if (TryConsume(_maxHpNetworkApplied, slot, delta))
                 {
-                    GD.Print($"[SyncCoordinator] MaxHP delta already applied by network: slot={slot} delta={delta}");
+                    SoulLinkLog.Debug($"[SyncCoordinator] MaxHP delta already applied by network: slot={slot} delta={delta}");
                     return false;
                 }
             }
@@ -99,7 +99,7 @@ public static class SyncCoordinator
             else
                 Enqueue(_maxHpCancellations, slot, delta);
 
-            GD.Print($"[SyncCoordinator] MaxHP applied: slot={slot} delta={delta} isNetwork={isFromNetwork}");
+            SoulLinkLog.Debug($"[SyncCoordinator] MaxHP applied: slot={slot} delta={delta} isNetwork={isFromNetwork}");
             return true;
         }
     }
@@ -137,7 +137,7 @@ public static class SyncCoordinator
             _hpNetworkApplied.Clear();
             _maxHpCancellations.Clear();
             _maxHpNetworkApplied.Clear();
-            GD.Print("[SyncCoordinator] Reset");
+            SoulLinkLog.Debug("[SyncCoordinator] Reset");
         }
     }
 

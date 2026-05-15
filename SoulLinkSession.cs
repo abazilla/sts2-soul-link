@@ -196,7 +196,7 @@ public static class SoulLinkSession
 
         // Debug: log each player's raw values so we can verify what the game reports at Launch() time.
         foreach (var p in runState.Players)
-            GD.Print($"[SoulLink] Player {p.Character.GetType().Name}: Character.StartingHp={p.Character.StartingHp}, Creature.MaxHp={p.Creature.MaxHp}, Creature.CurrentHp={p.Creature.CurrentHp}");
+            SoulLinkLog.Debug($"Player {p.Character.GetType().Name}: Character.StartingHp={p.Character.StartingHp}, Creature.MaxHp={p.Creature.MaxHp}, Creature.CurrentHp={p.Creature.CurrentHp}");
 
         // On a fresh run, Creature.MaxHp may be 0 on the host at Launch() time — fall back
         // to Character.StartingHp (the static data value) in that case.
@@ -233,7 +233,7 @@ public static class SoulLinkSession
             sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
             sharedCurrentHp = RoundedAverage(runState.Players,
                 p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
-            GD.Print($"[SoulLink] Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
+            SoulLinkLog.Debug($"Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
             _initPhaseComplete = true;
             Array.Fill(_slotCurrentHpSeeded, true);
             for (int i = 0; i < slotCount; i++)
@@ -250,7 +250,7 @@ public static class SoulLinkSession
             _initPhaseComplete = false;
             Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
             Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
-            GD.Print($"[SoulLink] Fresh run — pool MaxHp seeded to {sharedMaxHp}; CurrentHp deferred until vanilla's per-peer ascension writes finish.");
+            SoulLinkLog.Debug($"Fresh run — pool MaxHp seeded to {sharedMaxHp}; CurrentHp deferred until vanilla's per-peer ascension writes finish.");
         }
 
         // Determine which run settings to use.
@@ -258,14 +258,14 @@ public static class SoulLinkSession
         {
             ActiveRunSettings = PendingSyncedRunSettings.Value;
             PendingSyncedRunSettings = null;
-            GD.Print("[SoulLink] Applied pre-received run settings from host (early sync message).");
+            SoulLinkLog.Debug("Applied pre-received run settings from host (early sync message).");
         }
         else if (isSaveLoad)
         {
             SoulLinkRunSettings? saved = SoulLinkSettings.LoadRunSettings();
             ActiveRunSettings = saved ?? SoulLinkSettings.Instance.ToRunSettings();
             if (saved == null)
-                GD.PrintErr("[SoulLink] No run settings file found on save-load; using current settings.");
+                SoulLinkLog.Error("No run settings file found on save-load; using current settings.");
         }
         else
         {
@@ -274,7 +274,7 @@ public static class SoulLinkSession
 
         // Always re-save so re-hosting from this save will see the correct settings.
         SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
-        GD.Print($"[SoulLink] Run settings: HpMode={ActiveRunSettings.HpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"Run settings: HpMode={ActiveRunSettings.HpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
 
         // Vanilla HpMode never routes through ApplyHpDelta, so the in-combat trigger that
         // flips _initPhaseComplete never fires. Mark complete now so gold log entries
@@ -625,7 +625,7 @@ public static class SoulLinkSession
     {
         for (int i = 0; i < runState.Players.Count && i < _playerGold.Length; i++)
             _playerGold[i] = runState.Players[i].Gold;
-        GD.Print($"[SoulLink] ReinitPlayerGold: P0={_playerGold[0]}, P1={_playerGold[1]}");
+        SoulLinkLog.Debug($"ReinitPlayerGold: P0={_playerGold[0]}, P1={_playerGold[1]}");
     }
 
     /// <summary>
@@ -643,7 +643,7 @@ public static class SoulLinkSession
         SoulLinkMod.ApplyingCanonical = true;
         try { foreach (var p in runState.Players) p.Gold = Gold; }
         finally { SoulLinkMod.ApplyingCanonical = false; }
-        GD.Print($"[SoulLink] ReinitSharedGold: Gold={Gold}");
+        SoulLinkLog.Debug($"ReinitSharedGold: Gold={Gold}");
     }
 
     /// <summary>
@@ -668,24 +668,24 @@ public static class SoulLinkSession
             var net = RunManager.Instance?.NetService;
             if (net != null && net.IsConnected)
             {
-                GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: SENDING via run net#{net.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via run net#{net.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
                 net.SendMessage(msg);
                 return;
             }
 
             if (Patches.LobbyNetCapture.IsAvailable)
             {
-                GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: SENDING via lobby net#{Patches.LobbyNetCapture.Service!.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via lobby net#{Patches.LobbyNetCapture.Service!.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
                 Patches.LobbyNetCapture.TrySend(msg);
                 return;
             }
 
-            if (net == null) GD.Print("[SoulLink][SyncDiag] TrySendSettingsSync: net=null, lobby=null, skipping.");
-            else GD.Print($"[SoulLink][SyncDiag] TrySendSettingsSync: net.IsConnected=false (net#{net.GetHashCode()}), lobby=null, skipping.");
+            if (net == null) SoulLinkLog.Debug("[SyncDiag] TrySendSettingsSync: net=null, lobby=null, skipping.");
+            else SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: net.IsConnected=false (net#{net.GetHashCode()}), lobby=null, skipping.");
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] TrySendSettingsSync failed: {ex.Message}");
+            SoulLinkLog.Error($"TrySendSettingsSync failed: {ex.Message}");
         }
     }
 

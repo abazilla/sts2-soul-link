@@ -5,6 +5,8 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Actions;
 
 public struct HpChangeAction : INetAction
@@ -53,26 +55,26 @@ public struct HpChangeAction : INetAction
         // On the local machine, the HpSyncPatch already applied the delta via SyncCoordinator.
         if (context.IsLocal)
         {
-            GD.Print($"[SoulLink][HpChangeAction] Skipping local execution (already applied by patch)");
+            SoulLinkLog.Debug($"[HpChangeAction] Skipping local execution (already applied by patch)");
             return;
         }
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.PrintErr($"[SoulLink][HpChangeAction] Execute failed: no run state");
+            SoulLinkLog.Error($"[HpChangeAction] Execute failed: no run state");
             return;
         }
 
         if (PlayerSlot < 0 || PlayerSlot >= runState.Players.Count)
         {
-            GD.PrintErr($"[SoulLink][HpChangeAction] Execute failed: invalid player slot {PlayerSlot}");
+            SoulLinkLog.Error($"[HpChangeAction] Execute failed: invalid player slot {PlayerSlot}");
             return;
         }
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string combatStr = InCombat ? " [IN COMBAT]" : "";
-        GD.Print($"[SoulLink][HpAction.Execute] slot={PlayerSlot} delta={DeltaHp} isLocal={context.IsLocal} poolBefore={SoulLinkSession.CurrentHp}{sourceStr}{combatStr}");
+        SoulLinkLog.Debug($"[HpAction.Execute] slot={PlayerSlot} delta={DeltaHp} isLocal={context.IsLocal} poolBefore={SoulLinkSession.CurrentHp}{sourceStr}{combatStr}");
 
         int playerCount = runState.Players.Count;
 
@@ -81,7 +83,7 @@ public struct HpChangeAction : INetAction
         int? result = SyncCoordinator.TryApplyHpDelta(PlayerSlot, DeltaHp, isFromNetwork: true, InCombat, playerCount, Source);
         if (result == null)
         {
-            GD.Print($"[SoulLink][HpChangeAction] Skipping: already applied by local deterministic event");
+            SoulLinkLog.Debug($"[HpChangeAction] Skipping: already applied by local deterministic event");
             return;
         }
 

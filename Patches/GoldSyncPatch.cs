@@ -12,6 +12,8 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -169,7 +171,7 @@ public static class GoldSyncPatch
             if (goldMode == GoldSharingMode.SharedPool)
             {
                 int remDelta = value - __instance.Gold;
-                GD.Print($"[SoulLink][GoldSync] Remote setter slot={playerSlot} curGold={__instance.Gold} newValue={value} remDelta={remDelta} canonicalGold={SoulLinkSession.Gold} networkAppliedCount={_networkApplied.Count}");
+                SoulLinkLog.Debug($"[GoldSync] Remote setter slot={playerSlot} curGold={__instance.Gold} newValue={value} remDelta={remDelta} canonicalGold={SoulLinkSession.Gold} networkAppliedCount={_networkApplied.Count}");
                 if (remDelta == 0) return false;
 
                 // GoldSyncHandler already applied this purchase from the network broadcast
@@ -177,7 +179,7 @@ public static class GoldSyncPatch
                 // already correct — redirect to it so the game's setter writes the right
                 // value without double-applying the delta.
                 bool consumed = TryConsumeNetworkApplied(playerSlot);
-                GD.Print($"[SoulLink][GoldSync] TryConsumeNetworkApplied({playerSlot})={consumed}");
+                SoulLinkLog.Debug($"[GoldSync] TryConsumeNetworkApplied({playerSlot})={consumed}");
                 if (consumed)
                 {
                     // Redirect the setter value to the already-applied canonical so all

@@ -83,7 +83,7 @@ public static class SoulLinkMod
             catch (ReflectionTypeLoadException ex)
             {
                 types = ex.Types.Where(t => t != null).ToArray()!;
-                GD.PrintErr($"[SoulLink] {ex.LoaderExceptions.Length} type(s) failed to load — continuing with {types.Length} loaded.");
+                SoulLinkLog.Error($"{ex.LoaderExceptions.Length} type(s) failed to load — continuing with {types.Length} loaded.");
             }
 
             foreach (var type in types)
@@ -94,11 +94,11 @@ public static class SoulLinkMod
                 }
                 catch (Exception ex)
                 {
-                    GD.PrintErr($"[SoulLink] Failed to patch {type.Name}: {ex}");
+                    SoulLinkLog.Error($"Failed to patch {type.Name}: {ex}");
                 }
             }
 
-            GD.Print("[SoulLink] Initialized.");
+            SoulLinkLog.Info($"Initialized v{Version}.");
 
             try
             {
@@ -110,12 +110,12 @@ public static class SoulLinkMod
             }
             catch (Exception ex)
             {
-                GD.PrintErr($"[SoulLink] Localization inject failed: {ex}");
+                SoulLinkLog.Error($"Localization inject failed: {ex}");
             }
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Initialize() crashed: {ex}");
+            SoulLinkLog.Error($"Initialize() crashed: {ex}");
         }
     }
 }

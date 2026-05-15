@@ -5,6 +5,8 @@ using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Runs;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -35,12 +37,12 @@ public static class SoulLinkDeathPrevention
     {
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.Print($"[SoulLink][DeathPrev] runState empty");
+            SoulLinkLog.Debug($"[DeathPrev] runState empty");
             return (0, "");
         }
 
         int playerCount = runState.Players.Count;
-        GD.Print($"[SoulLink][DeathPrev] scan dyingSlot={dyingSlot} playerCount={playerCount}");
+        SoulLinkLog.Debug($"[DeathPrev] scan dyingSlot={dyingSlot} playerCount={playerCount}");
 
         for (int offset = 0; offset < playerCount; offset++)
         {
@@ -48,23 +50,23 @@ public static class SoulLinkDeathPrevention
             var player = runState.Players[slot];
             if (player == null)
             {
-                GD.Print($"[SoulLink][DeathPrev]   slot={slot} player=null");
+                SoulLinkLog.Debug($"[DeathPrev]   slot={slot} player=null");
                 continue;
             }
 
             int potionCount = 0;
             foreach (var p in player.PotionSlots) if (p != null) potionCount++;
-            GD.Print($"[SoulLink][DeathPrev]   slot={slot} netId={player.NetId} potions={potionCount} relics={player.Relics.Count}");
+            SoulLinkLog.Debug($"[DeathPrev]   slot={slot} netId={player.NetId} potions={potionCount} relics={player.Relics.Count}");
 
             for (int i = 0; i < player.PotionSlots.Count; i++)
             {
                 var p = player.PotionSlots[i];
-                if (p != null) GD.Print($"[SoulLink][DeathPrev]     potion[{i}]={p.GetType().Name}");
+                if (p != null) SoulLinkLog.Debug($"[DeathPrev]     potion[{i}]={p.GetType().Name}");
             }
             foreach (var r in player.Relics)
             {
                 string used = r is LizardTail lt ? $" wasUsed={lt.WasUsed}" : "";
-                GD.Print($"[SoulLink][DeathPrev]     relic={r.GetType().Name}{used}");
+                SoulLinkLog.Debug($"[DeathPrev]     relic={r.GetType().Name}{used}");
             }
 
             // Fairy first (vanilla also prefers ShouldDie over ShouldDieLate).
@@ -75,7 +77,7 @@ public static class SoulLinkDeathPrevention
                     int heal = Math.Max(1, (int)Math.Round(SoulLinkSession.MaxHp * 0.30));
                     player.DiscardPotionInternal(fairy);
                     string label = $"Player healed {heal} health via Fairy in a Bottle";
-                    GD.Print($"[SoulLink][DeathPrev] consumed FAIRY_IN_A_BOTTLE from slot={slot} (dying={dyingSlot}) heal={heal}");
+                    SoulLinkLog.Debug($"[DeathPrev] consumed FAIRY_IN_A_BOTTLE from slot={slot} (dying={dyingSlot}) heal={heal}");
                     return (heal, label);
                 }
             }
@@ -87,13 +89,13 @@ public static class SoulLinkDeathPrevention
                     int heal = Math.Max(1, (int)Math.Round(SoulLinkSession.MaxHp * 0.50));
                     lizard.WasUsed = true;
                     string label = $"Player healed {heal} health via Lizard Tail";
-                    GD.Print($"[SoulLink][DeathPrev] consumed LIZARD_TAIL from slot={slot} (dying={dyingSlot}) heal={heal}");
+                    SoulLinkLog.Debug($"[DeathPrev] consumed LIZARD_TAIL from slot={slot} (dying={dyingSlot}) heal={heal}");
                     return (heal, label);
                 }
             }
         }
 
-        GD.Print($"[SoulLink][DeathPrev] no preventer found");
+        SoulLinkLog.Debug($"[DeathPrev] no preventer found");
         return (0, "");
     }
 }

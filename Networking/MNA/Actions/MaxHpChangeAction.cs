@@ -5,6 +5,8 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Actions;
 
 public struct MaxHpChangeAction : INetAction
@@ -53,26 +55,26 @@ public struct MaxHpChangeAction : INetAction
         // On the local machine, the MaxHpSyncPatch already applied the delta via SyncCoordinator.
         if (context.IsLocal)
         {
-            GD.Print($"[SoulLink][MaxHpChangeAction] Skipping local execution (already applied by patch)");
+            SoulLinkLog.Debug($"[MaxHpChangeAction] Skipping local execution (already applied by patch)");
             return;
         }
 
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null || runState.Players.Count == 0)
         {
-            GD.PrintErr($"[SoulLink][MaxHpChangeAction] Execute failed: no run state");
+            SoulLinkLog.Error($"[MaxHpChangeAction] Execute failed: no run state");
             return;
         }
 
         if (PlayerSlot < 0 || PlayerSlot >= runState.Players.Count)
         {
-            GD.PrintErr($"[SoulLink][MaxHpChangeAction] Execute failed: invalid player slot {PlayerSlot}");
+            SoulLinkLog.Error($"[MaxHpChangeAction] Execute failed: invalid player slot {PlayerSlot}");
             return;
         }
 
         string sourceStr = Source != null ? $" (source: {Source})" : "";
         string combatStr = InCombat ? " [IN COMBAT]" : "";
-        GD.Print($"[SoulLink][MaxHpChangeAction] Execute: player={PlayerSlot} delta={DeltaMaxHp}{sourceStr}{combatStr} isLocal={context.IsLocal}");
+        SoulLinkLog.Debug($"[MaxHpChangeAction] Execute: player={PlayerSlot} delta={DeltaMaxHp}{sourceStr}{combatStr} isLocal={context.IsLocal}");
 
         int playerCount = runState.Players.Count;
 
@@ -81,7 +83,7 @@ public struct MaxHpChangeAction : INetAction
         bool applied = SyncCoordinator.TryApplyMaxHpDelta(PlayerSlot, DeltaMaxHp, isFromNetwork: true, InCombat, playerCount, Source);
         if (!applied)
         {
-            GD.Print($"[SoulLink][MaxHpChangeAction] Skipping: already applied by local deterministic event");
+            SoulLinkLog.Debug($"[MaxHpChangeAction] Skipping: already applied by local deterministic event");
             return;
         }
 

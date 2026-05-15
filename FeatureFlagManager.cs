@@ -22,7 +22,7 @@ public static class FeatureFlagManager
         // Gold sharing mechanics (shared pool / split-by-player); off uses vanilla gold.
         [FeatureFlag.GoldSharing] = (true, FeatureFlagScope.Run),
         // In-game debug overlay panel: sync state, net stats, diagnostics.
-        [FeatureFlag.DebugOverlay] = (true, FeatureFlagScope.Session),
+        [FeatureFlag.DebugOverlay] = (false, FeatureFlagScope.Session),
         // Combat log panel: history of HP/gold changes with sources.
         [FeatureFlag.CombatLog] = (true, FeatureFlagScope.Session),
         // Run stats panel: aggregate stats across all players.
@@ -57,11 +57,9 @@ public static class FeatureFlagManager
         {
             case FeatureFlagScope.Global:
                 _globalFlags[flag] = enabled;
-                // TODO: persist to mod settings file
                 break;
             case FeatureFlagScope.Run:
                 _runFlags[flag] = enabled;
-                // TODO: broadcast to all clients if in multiplayer
                 break;
             case FeatureFlagScope.Session:
                 _sessionFlags[flag] = enabled;

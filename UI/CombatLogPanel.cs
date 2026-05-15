@@ -7,6 +7,8 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -90,12 +92,12 @@ public class CombatLogPanel : Control
             SoulLinkFont.Apply(_label);
             vbox.AddChild(_label);
 
-            GD.Print($"[SoulLink] CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
+            SoulLinkLog.Debug($"CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
             Refresh();
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] CombatLogPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"CombatLogPanel.Initialize crashed: {ex}");
         }
     }
 
@@ -103,7 +105,7 @@ public class CombatLogPanel : Control
     {
         if (_label == null) return;
         try   { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] CombatLogPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"CombatLogPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;
@@ -315,7 +317,7 @@ public class CombatLogPanel : Control
 
             if (_diagLogged.Add(netId))
             {
-                GD.Print($"[SoulLink] GetPlayerName slot={slot} netId={netId} " +
+                SoulLinkLog.Debug($"GetPlayerName slot={slot} netId={netId} " +
                          $"platform={platform} resolved='{resolved}' fallback='{fallback}'");
             }
 
@@ -323,7 +325,7 @@ public class CombatLogPanel : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] GetPlayerName slot={slot} netId={netId} crashed: {ex.Message}");
+            SoulLinkLog.Error($"GetPlayerName slot={slot} netId={netId} crashed: {ex.Message}");
             return fallback;
         }
     }

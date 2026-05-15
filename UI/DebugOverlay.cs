@@ -2,6 +2,8 @@ using System;
 using Godot;
 using MegaCrit.Sts2.Core.Runs;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -68,7 +70,7 @@ public class DebugOverlay : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] DebugOverlay.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"DebugOverlay.Initialize crashed: {ex}");
         }
     }
 
@@ -77,7 +79,7 @@ public class DebugOverlay : Control
     public void Refresh()
     {
         try { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] DebugOverlay.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"DebugOverlay.Refresh crashed: {ex}"); }
     }
 
     // ── Build ─────────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@ using System.Reflection;
 using Godot;
 using HarmonyLib;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -59,7 +61,7 @@ internal static class LobbyNetCapture
             var unreg = FindGenericMethod(svcType, "UnregisterMessageHandler", 1);
             if (send == null)
             {
-                GD.Print($"[SoulLink][SyncDiag] LobbyNetCapture: found service {svcType.FullName} from {source} but no SendMessage<T>(T) method; skipping.");
+                SoulLinkLog.Debug($"[SyncDiag] LobbyNetCapture: found service {svcType.FullName} from {source} but no SendMessage<T>(T) method; skipping.");
                 return;
             }
 
@@ -68,13 +70,13 @@ internal static class LobbyNetCapture
             _sendOpen = send;
             _registerOpen = reg;
             _unregisterOpen = unreg;
-            GD.Print($"[SoulLink][SyncDiag] LobbyNetCapture: captured {svcType.FullName} (hash {svc.GetHashCode()}) from {source} (send={send != null}, reg={reg != null}, unreg={unreg != null})");
+            SoulLinkLog.Debug($"[SyncDiag] LobbyNetCapture: captured {svcType.FullName} (hash {svc.GetHashCode()}) from {source} (send={send != null}, reg={reg != null}, unreg={unreg != null})");
             try { OnCaptured?.Invoke(); }
-            catch (Exception ex) { GD.PrintErr($"[SoulLink] LobbyNetCapture OnCaptured handler threw: {ex}"); }
+            catch (Exception ex) { SoulLinkLog.Error($"LobbyNetCapture OnCaptured handler threw: {ex}"); }
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink][SyncDiag] LobbyNetCapture.TryCapture from {source} failed: {ex.Message}");
+            SoulLinkLog.Error($"[SyncDiag] LobbyNetCapture.TryCapture from {source} failed: {ex.Message}");
         }
     }
 
@@ -101,7 +103,7 @@ internal static class LobbyNetCapture
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] LobbyNetCapture.TrySend<{typeof(T).Name}> failed: {ex.Message}");
+            SoulLinkLog.Error($"LobbyNetCapture.TrySend<{typeof(T).Name}> failed: {ex.Message}");
             return false;
         }
     }
@@ -118,7 +120,7 @@ internal static class LobbyNetCapture
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] LobbyNetCapture.TryRegister<{typeof(T).Name}> failed: {ex.Message}");
+            SoulLinkLog.Error($"LobbyNetCapture.TryRegister<{typeof(T).Name}> failed: {ex.Message}");
             return false;
         }
     }
@@ -135,7 +137,7 @@ internal static class LobbyNetCapture
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] LobbyNetCapture.TryUnregister<{typeof(T).Name}> failed: {ex.Message}");
+            SoulLinkLog.Error($"LobbyNetCapture.TryUnregister<{typeof(T).Name}> failed: {ex.Message}");
             return false;
         }
     }
@@ -198,7 +200,7 @@ internal static class LobbyCaptureUtil
         var type = AccessTools.TypeByName(typeName);
         if (type == null)
         {
-            GD.Print($"[SoulLink][SyncDiag] LobbyNetCapture: type not found: {typeName}");
+            SoulLinkLog.Debug($"[SyncDiag] LobbyNetCapture: type not found: {typeName}");
             return Enumerable.Empty<MethodBase>();
         }
         var ctors = type

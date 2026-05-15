@@ -22,3 +22,25 @@ Local.props
 # AI agent config files
 AGENTS.md
 CLAUDE.md
+
+# Build artifacts
+*.pdb
+
+# IDE / editor
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Secrets
+.env
+*.key
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db

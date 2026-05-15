@@ -86,17 +86,17 @@ public class SoulLinkSettings
                 string json = File.ReadAllText(SettingsPath);
                 _instance = JsonSerializer.Deserialize<SoulLinkSettings>(json, _jsonOptions)
                             ?? new SoulLinkSettings();
-                GD.Print("[SoulLink] Settings loaded.");
+                SoulLinkLog.Debug("Settings loaded.");
                 return;
             }
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to load settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to load settings: {ex.Message}");
         }
 
         _instance = new SoulLinkSettings();
-        GD.Print("[SoulLink] Using default settings.");
+        SoulLinkLog.Debug("Using default settings.");
     }
 
     public static void Save()
@@ -108,7 +108,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to save settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to save settings: {ex.Message}");
         }
     }
 
@@ -125,7 +125,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to save run settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to save run settings: {ex.Message}");
         }
     }
 
@@ -145,7 +145,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to load run settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to load run settings: {ex.Message}");
         }
         return null;
     }

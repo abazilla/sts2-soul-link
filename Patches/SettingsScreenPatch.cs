@@ -6,6 +6,8 @@ using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Nodes.Screens.ModdingScreen;
 using SoulLinkMod.UI;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.Patches;
 
 /// <summary>
@@ -37,7 +39,7 @@ public static class ModInfoReadyPatch
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] ModInfoReadyPatch crashed: {ex}");
+            SoulLinkLog.Error($"ModInfoReadyPatch crashed: {ex}");
         }
     }
 
@@ -80,8 +82,6 @@ public static class ModInfoReadyPatch
         // Panel visibility checkboxes
         vbox.AddChild(MakeCheckBox("Show Soul Feed (top right)",    SoulLinkSettings.Instance.ShowCombatLog,
             on => { SoulLinkSettings.Instance.ShowCombatLog    = on; SoulLinkSettings.Save(); }));
-        vbox.AddChild(MakeCheckBox("Show Run Stats (left panel)",   SoulLinkSettings.Instance.ShowRunStats,
-            on => { SoulLinkSettings.Instance.ShowRunStats     = on; SoulLinkSettings.Save(); }));
         vbox.AddChild(MakeCheckBox("Show Debug Overlay",            SoulLinkSettings.Instance.ShowDebugOverlay,
             on => { SoulLinkSettings.Instance.ShowDebugOverlay = on; SoulLinkSettings.Save(); }));
 
@@ -129,9 +129,8 @@ public static class ModInfoFillPatch
                 if (child is CheckBox cb)
                 {
                     string text = cb.Text;
-                    bool value = text.Contains("Soul Feed")  ? s.ShowCombatLog
-                               : text.Contains("Run Stats")  ? s.ShowRunStats
-                               :                               s.ShowDebugOverlay;
+                    bool value = text.Contains("Soul Feed") ? s.ShowCombatLog
+                                                            : s.ShowDebugOverlay;
                     cb.SetPressedNoSignal(value);
                 }
                 childIdx++;
@@ -139,7 +138,7 @@ public static class ModInfoFillPatch
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] ModInfoFillPatch crashed: {ex}");
+            SoulLinkLog.Error($"ModInfoFillPatch crashed: {ex}");
         }
     }
 }
