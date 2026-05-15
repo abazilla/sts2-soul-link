@@ -1,6 +1,8 @@
 using System;
 using Godot;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -32,6 +34,7 @@ public class RunStatsPanel : Control
     private static readonly Color ColorHeal      = new(0.2f, 1f,   0.3f, 1f);
     private static readonly Color ColorGoldGain  = new(1f,   0.9f, 0f,   1f);
     private static readonly Color ColorGoldSpend = new(1f,   0.65f,0f,   1f);
+    private static readonly Color ColorAccentYellow = new Color("efc851");
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -48,21 +51,24 @@ public class RunStatsPanel : Control
             OffsetRight  = OffLeft + PanelW;
             OffsetBottom = OffTop  + PanelH;
 
-            MouseFilter = MouseFilterEnum.Pass;
+            // Ignore on the root so clicks outside the toggle button fall through to
+            // game UI underneath (back button etc.). The header Button keeps its
+            // default Stop filter, so the collapse toggle still works.
+            MouseFilter = MouseFilterEnum.Ignore;
 
             BuildUI();
             Refresh();
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] RunStatsPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"RunStatsPanel.Initialize crashed: {ex}");
         }
     }
 
     public void Refresh()
     {
         try   { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] RunStatsPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"RunStatsPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;
@@ -71,19 +77,22 @@ public class RunStatsPanel : Control
 
     private void BuildUI()
     {
-        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(vbox);
 
         // Header button — borderless, looks like a plain clickable label.
         _toggleButton = new Button { Text = "Run Stats v" };
+        _toggleButton.Alignment = HorizontalAlignment.Left;
         _toggleButton.Pressed += OnToggle;
         ApplyHeaderButtonStyle(_toggleButton);
+        ApplyHeaderTextStyle(_toggleButton);
         SoulLinkFont.Apply(_toggleButton);
         vbox.AddChild(_toggleButton);
 
-        // Content background — hidden when collapsed.
+        // Content background — transparent (no panel bg).
         _bgPanel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+        _bgPanel.AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
         vbox.AddChild(_bgPanel);
 
         var stats = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
@@ -102,8 +111,31 @@ public class RunStatsPanel : Control
     private static Label MakeStatLabel()
     {
         var lbl = new Label { HorizontalAlignment = HorizontalAlignment.Left };
+        ApplyBodyTextStyle(lbl);
         SoulLinkFont.Apply(lbl);
         return lbl;
+    }
+
+    private static void ApplyHeaderTextStyle(Control c)
+    {
+        var hover = Lighten(ColorAccentYellow, 0.4f);
+        c.AddThemeColorOverride("font_color",                ColorAccentYellow);
+        c.AddThemeColorOverride("font_hover_color",          hover);
+        c.AddThemeColorOverride("font_hover_pressed_color",  hover);
+        c.AddThemeColorOverride("font_pressed_color",        hover);
+        c.AddThemeColorOverride("font_focus_color",          ColorAccentYellow);
+        c.AddThemeConstantOverride("outline_size", 6);
+        c.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
+    }
+
+    private static Color Lighten(Color c, float t) =>
+        new Color(c.R + (1f - c.R) * t, c.G + (1f - c.G) * t, c.B + (1f - c.B) * t, c.A);
+
+    private static void ApplyBodyTextStyle(Control c)
+    {
+        c.AddThemeConstantOverride("shadow_offset_x", 1);
+        c.AddThemeConstantOverride("shadow_offset_y", 1);
+        c.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.85f));
     }
 
     private static void ApplyHeaderButtonStyle(Button btn)

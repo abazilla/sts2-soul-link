@@ -2,6 +2,8 @@ using System;
 using Godot;
 using MegaCrit.Sts2.Core.Runs;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -22,7 +24,6 @@ public class DebugOverlay : Control
 {
     public static DebugOverlay? Current;
 
-    private const int MaxPlayers = 4;
     private const float PanelW   = 240f;
     private const float PanelH   = 185f;
     private const float AnchorV  = 0.5f;
@@ -34,14 +35,15 @@ public class DebugOverlay : Control
     private PanelContainer? _bgPanel;
     private Label? _sessionHpLbl;
     private Label? _sessionGoldLbl;
-    private Label? _settingsLbl1;
-    private Label? _settingsLbl2;
-    private readonly Label[] _playerLbls = new Label[MaxPlayers];
+    private Label? _hpModeLbl;
+    private Label? _splitMaxHpLbl;
+    private Label? _splitHealLbl;
+    private Label? _goldModeLbl;
 
-    private static readonly Color ColorHp       = new(0.6f, 1f,   0.6f, 1f);
-    private static readonly Color ColorGold     = new(1f,   0.9f, 0f,   1f);
-    private static readonly Color ColorPlayer   = new(0.8f, 0.8f, 1f,   1f);
-    private static readonly Color ColorMismatch = new(1f,   0.4f, 0.1f, 1f);
+    private static readonly Color ColorAccentYellow = new Color("efc851");
+    private static readonly Color ColorHp           = new Color("4ec94e");
+    private static readonly Color ColorGold         = ColorAccentYellow;
+    private static readonly Color ColorBody         = new Color("e8e0c8");
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -58,14 +60,17 @@ public class DebugOverlay : Control
             OffsetRight  = OffLeft + PanelW;
             OffsetBottom = OffTop  + PanelH;
 
-            MouseFilter = MouseFilterEnum.Pass;
+            // Ignore on the root so clicks outside the toggle button fall through to
+            // game UI underneath (back button etc.). The header Button keeps its
+            // default Stop filter, so the collapse toggle still works.
+            MouseFilter = MouseFilterEnum.Ignore;
 
             BuildUI();
             DoRefresh();
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] DebugOverlay.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"DebugOverlay.Initialize crashed: {ex}");
         }
     }
 
@@ -74,61 +79,94 @@ public class DebugOverlay : Control
     public void Refresh()
     {
         try { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] DebugOverlay.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"DebugOverlay.Refresh crashed: {ex}"); }
     }
 
     // ── Build ─────────────────────────────────────────────────────────────────
 
     private void BuildUI()
     {
-        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(vbox);
 
         // Header button — borderless, looks like a plain clickable label.
-        _toggleButton = new Button { Text = $"Soul Link Debug ({SoulLinkMod.Version}) v" };
+        _toggleButton = new Button { Text = $"Soul Link Debug (v{SoulLinkMod.Version}) v" };
+        _toggleButton.Alignment = HorizontalAlignment.Left;
         _toggleButton.Pressed += OnToggle;
         ApplyHeaderButtonStyle(_toggleButton);
+        ApplyHeaderTextStyle(_toggleButton);
         SoulLinkFont.Apply(_toggleButton);
         vbox.AddChild(_toggleButton);
 
-        // Content background — hidden when collapsed.
+        // Content background — transparent (no panel bg).
         _bgPanel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore };
+        _bgPanel.AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
         vbox.AddChild(_bgPanel);
 
         var content = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         _bgPanel.AddChild(content);
 
-        _sessionHpLbl   = MakeLabel();
+        _hpModeLbl     = MakeLabel();
+        _sessionHpLbl  = MakeLabel();
+        _splitMaxHpLbl = MakeLabel();
+        _splitHealLbl  = MakeLabel();
+        _goldModeLbl   = MakeLabel();
         _sessionGoldLbl = MakeLabel();
-        content.AddChild(_sessionHpLbl);
-        content.AddChild(_sessionGoldLbl);
 
-        content.AddChild(new HSeparator());
+        content.AddChild(_hpModeLbl);
+        // Session HP + split flags hang under HP Mode.
+        content.AddChild(IndentLabel(_sessionHpLbl,  20));
+        content.AddChild(IndentLabel(_splitMaxHpLbl, 20));
+        content.AddChild(IndentLabel(_splitHealLbl,  20));
+        content.AddChild(MakeSpacer(2));
+        content.AddChild(_goldModeLbl);
+        content.AddChild(IndentLabel(_sessionGoldLbl, 20));
+    }
 
-        _settingsLbl1 = MakeLabel();
-        _settingsLbl2 = MakeLabel();
-        content.AddChild(_settingsLbl1);
-        content.AddChild(_settingsLbl2);
-
-        content.AddChild(new HSeparator());
-
-        var playerHeader = MakeLabel();
-        playerHeader.Text = "Game HP (actual):";
-        content.AddChild(playerHeader);
-
-        for (int i = 0; i < MaxPlayers; i++)
-        {
-            _playerLbls[i] = MakeLabel();
-            content.AddChild(_playerLbls[i]);
-        }
+    private static Control MakeSpacer(int height)
+    {
+        var c = new Control { MouseFilter = MouseFilterEnum.Ignore };
+        c.CustomMinimumSize = new Vector2(0, height);
+        return c;
     }
 
     private static Label MakeLabel()
     {
         var lbl = new Label { HorizontalAlignment = HorizontalAlignment.Left };
+        ApplyBodyTextStyle(lbl);
         SoulLinkFont.Apply(lbl);
         return lbl;
+    }
+
+    private static Control IndentLabel(Label lbl, int left)
+    {
+        var m = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
+        m.AddThemeConstantOverride("margin_left", left);
+        m.AddChild(lbl);
+        return m;
+    }
+
+    private static void ApplyHeaderTextStyle(Control c)
+    {
+        var hover = Lighten(ColorAccentYellow, 0.4f);
+        c.AddThemeColorOverride("font_color",                ColorAccentYellow);
+        c.AddThemeColorOverride("font_hover_color",          hover);
+        c.AddThemeColorOverride("font_hover_pressed_color",  hover);
+        c.AddThemeColorOverride("font_pressed_color",        hover);
+        c.AddThemeColorOverride("font_focus_color",          ColorAccentYellow);
+        c.AddThemeConstantOverride("outline_size", 6);
+        c.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
+    }
+
+    private static Color Lighten(Color c, float t) =>
+        new Color(c.R + (1f - c.R) * t, c.G + (1f - c.G) * t, c.B + (1f - c.B) * t, c.A);
+
+    private static void ApplyBodyTextStyle(Control c)
+    {
+        c.AddThemeConstantOverride("shadow_offset_x", 1);
+        c.AddThemeConstantOverride("shadow_offset_y", 1);
+        c.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.85f));
     }
 
     private static void ApplyHeaderButtonStyle(Button btn)
@@ -150,46 +188,44 @@ public class DebugOverlay : Control
 
         var rs = SoulLinkSession.ActiveRunSettings;
 
-        Set(_sessionHpLbl, $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
+        bool showSessionHp = rs.HpMode != HpMode.Vanilla;
+        if (_sessionHpLbl?.GetParent() is Control sessHpWrap) sessHpWrap.Visible = showSessionHp;
+        if (showSessionHp)
+            Set(_sessionHpLbl, $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
 
-        string goldLine = rs.GoldMode switch
+        bool showSessionGold = rs.GoldMode != GoldSharingMode.Default;
+        if (_sessionGoldLbl?.GetParent() is Control sessGoldWrap) sessGoldWrap.Visible = showSessionGold;
+        if (showSessionGold)
         {
-            GoldSharingMode.SplitByPlayer => $"Gold P0:{SoulLinkSession.GetPlayerGold(0)}  P1:{SoulLinkSession.GetPlayerGold(1)}",
-            GoldSharingMode.SharedPool    => $"Session Gold:  {SoulLinkSession.Gold}",
-            _                             => "Gold: STS2 default",
-        };
-        Set(_sessionGoldLbl, goldLine, ColorGold);
-
-        Set(_settingsLbl1, $"SplitHP:{rs.SplitMaxHp}  SplitHeal:{rs.SplitHeal}", ColorPlayer);
-        Set(_settingsLbl2, $"GoldMode:{rs.GoldMode}", ColorPlayer);
-
-        var runState = RunManager.Instance?.DebugOnlyGetState();
-        for (int i = 0; i < MaxPlayers; i++)
-        {
-            if (_playerLbls[i] == null) continue;
-
-            if (runState != null && i < runState.Players.Count)
+            string goldLine = rs.GoldMode switch
             {
-                var p       = runState.Players[i];
-                int actual  = p.Creature.CurrentHp;
-                int max     = p.Creature.MaxHp;
-                string name = p.Character.GetType().Name;
-                bool mismatch = actual != SoulLinkSession.CurrentHp;
-                _playerLbls[i].Text = $"P{i} {name}: {actual}/{max}";
-                _playerLbls[i].AddThemeColorOverride("font_color", mismatch ? ColorMismatch : ColorPlayer);
-                _playerLbls[i].Visible = true;
-            }
-            else
-            {
-                _playerLbls[i].Visible = false;
-            }
+                GoldSharingMode.SplitByPlayer => $"Gold P0:{SoulLinkSession.GetPlayerGold(0)}  P1:{SoulLinkSession.GetPlayerGold(1)}",
+                GoldSharingMode.SharedPool    => $"Session Gold:  {SoulLinkSession.Gold}",
+                _                             => "",
+            };
+            Set(_sessionGoldLbl, goldLine, ColorGold);
         }
+
+        string hpModeName = rs.HpMode == HpMode.Vanilla ? "Default" : rs.HpMode.ToString();
+        Set(_hpModeLbl,     $"HP Mode: {hpModeName}",               ColorBody);
+
+        // Split flags only apply when an HP-sharing mode is active.
+        bool splitVisible = rs.HpMode != HpMode.Vanilla;
+        if (_splitMaxHpLbl?.GetParent() is Control splitMaxWrap) splitMaxWrap.Visible = splitVisible;
+        if (_splitHealLbl?.GetParent()  is Control splitHealWrap) splitHealWrap.Visible = splitVisible;
+        if (splitVisible)
+        {
+            Set(_splitMaxHpLbl, $"Split MaxHP: {rs.SplitMaxHp}",    ColorBody);
+            Set(_splitHealLbl,  $"Split Heal: {rs.SplitHeal}",      ColorBody);
+        }
+
+        Set(_goldModeLbl,   $"Gold Mode: {rs.GoldMode}",            ColorBody);
 
         if (_bgPanel != null)
             _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
-            _toggleButton.Text = $"Soul Link Debug ({SoulLinkMod.Version}) {(_expanded ? "v" : ">")}";
+            _toggleButton.Text = $"Soul Link Debug (v{SoulLinkMod.Version}) {(_expanded ? "v" : ">")}";
     }
 
     private static void Set(Label? lbl, string text, Color color)

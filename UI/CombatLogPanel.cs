@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Godot;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
-using Steamworks;
+
+using SoulLinkMod;
 
 namespace SoulLinkMod.UI;
 
@@ -31,15 +34,6 @@ public class CombatLogPanel : Control
     private bool _expanded = true;
     private Button? _toggleButton;
 
-    // Player slot → color hex (no alpha prefix)
-    private static readonly string[] PlayerColorHex =
-    {
-        "00ffff",   // slot 0 — cyan
-        "ffd900",   // slot 1 — gold/yellow
-        "ff4dff",   // slot 2 — magenta/pink
-        "80ff80",   // slot 3 — light green
-    };
-
     private const string HexDamage    = "ff3333";
     private const string HexHeal      = "33ff4d";
     private const string HexGoldGain  = "ffe519";
@@ -47,6 +41,7 @@ public class CombatLogPanel : Control
     private const string HexBlocked   = "808080";
     private const string HexSource    = "ffffff";
     private const string HexHeader    = "999999";
+    private static readonly Color ColorAccentYellow = new Color("efc851");
 
     private RichTextLabel? _label;
 
@@ -76,6 +71,7 @@ public class CombatLogPanel : Control
             _toggleButton = new Button { Text = "Soul Link Feed v" };
             _toggleButton.Pressed += OnToggle;
             ApplyHeaderButtonStyle(_toggleButton);
+            ApplyHeaderTextStyle(_toggleButton);
             SoulLinkFont.Apply(_toggleButton);
             vbox.AddChild(_toggleButton);
 
@@ -90,15 +86,18 @@ public class CombatLogPanel : Control
             };
             _label.CustomMinimumSize = new Vector2(PanelW, MaxVisible * LineHeight);
             _label.AddThemeFontSizeOverride("normal_font_size", 15);
+            _label.AddThemeConstantOverride("shadow_offset_x", 1);
+            _label.AddThemeConstantOverride("shadow_offset_y", 1);
+            _label.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.85f));
             SoulLinkFont.Apply(_label);
             vbox.AddChild(_label);
 
-            GD.Print($"[SoulLink] CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
+            SoulLinkLog.Debug($"CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
             Refresh();
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] CombatLogPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"CombatLogPanel.Initialize crashed: {ex}");
         }
     }
 
@@ -106,7 +105,7 @@ public class CombatLogPanel : Control
     {
         if (_label == null) return;
         try   { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] CombatLogPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"CombatLogPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;
@@ -171,16 +170,49 @@ public class CombatLogPanel : Control
         btn.AddThemeStyleboxOverride("disabled", empty);
     }
 
+    private static void ApplyHeaderTextStyle(Control c)
+    {
+        var hover = Lighten(ColorAccentYellow, 0.4f);
+        c.AddThemeColorOverride("font_color",                ColorAccentYellow);
+        c.AddThemeColorOverride("font_hover_color",          hover);
+        c.AddThemeColorOverride("font_hover_pressed_color",  hover);
+        c.AddThemeColorOverride("font_pressed_color",        hover);
+        c.AddThemeColorOverride("font_focus_color",          ColorAccentYellow);
+        c.AddThemeConstantOverride("outline_size", 6);
+        c.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
+    }
+
+    private static Color Lighten(Color c, float t) =>
+        new Color(c.R + (1f - c.R) * t, c.G + (1f - c.G) * t, c.B + (1f - c.B) * t, c.A);
+
     // ── Formatting ────────────────────────────────────────────────────────────
 
     private static List<(string text, string hex)> FormatEntry(LogEntry entry, RunState runState)
     {
-        string playerHex  = PlayerColorHex[Math.Min(entry.PlayerSlot, PlayerColorHex.Length - 1)];
-        string playerName = GetPlayerName(entry.PlayerSlot, runState);
+        int slot = entry.PlayerSlot;
+        Player? player = (slot >= 0 && slot < runState.Players.Count) ? runState.Players[slot] : null;
+        string playerHex  = GetPlayerHex(slot, player);
+        string playerName = GetPlayerName(slot, runState);
 
         return entry.Type == LogEntryType.Health
             ? FormatHealth(playerName, playerHex, entry)
             : FormatGold(playerName, playerHex, entry);
+    }
+
+    // Per-player colour = shade of class MapDrawingColor, varied by slot so two
+    // players sharing a class are still distinguishable.
+    private static string GetPlayerHex(int slot, Player? player)
+    {
+        if (player == null) return "ffffff";
+        Color baseColor = player.Character.MapDrawingColor;
+        Color shaded = slot switch
+        {
+            0 => baseColor.Lightened(0.35f),
+            1 => baseColor.Lightened(0.55f),
+            2 => baseColor.Lightened(0.15f),
+            _ => baseColor.Lightened(0.7f),
+        };
+        return shaded.ToHtml(false);
     }
 
     private static List<(string, string)> FormatHealth(string name, string nameHex, LogEntry e)
@@ -251,23 +283,50 @@ public class CombatLogPanel : Control
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private static readonly Dictionary<ulong, string> _nameCache = new();
+    private static readonly HashSet<ulong> _diagLogged = new();
+
     private static string GetPlayerName(int slot, RunState runState)
     {
         if (slot < 0 || slot >= runState.Players.Count)
             return $"P{slot}";
 
         var player = runState.Players[slot];
+        ulong netId = player.NetId;
+
+        if (_nameCache.TryGetValue(netId, out var cached))
+            return cached;
+
+        string resolved = ResolveNameUncached(player, netId, slot);
+        if (!string.IsNullOrEmpty(resolved) && netId != 0)
+            _nameCache[netId] = resolved;
+        return resolved;
+    }
+
+    private static string ResolveNameUncached(Player player, ulong netId, int slot)
+    {
+        string fallback = player.Character.GetType().Name;
         try
         {
-            ulong localId = SteamUser.GetSteamID().m_SteamID;
-            string name = player.NetId == localId
-                ? SteamFriends.GetPersonaName()
-                : SteamFriends.GetFriendPersonaName(new CSteamID(player.NetId));
-            return string.IsNullOrEmpty(name) ? player.Character.GetType().Name : name;
+            var platform = RunManager.Instance?.NetService?.Platform ?? PlatformUtil.PrimaryPlatform;
+            string resolved = PlatformUtil.GetPlayerName(platform, netId);
+
+            // SteamPlatformUtilStrategy returns netId.ToString() when Steam lookup fails;
+            // treat that bare-number result as unresolved.
+            bool looksLikeRawId = ulong.TryParse(resolved, out _);
+
+            if (_diagLogged.Add(netId))
+            {
+                SoulLinkLog.Debug($"GetPlayerName slot={slot} netId={netId} " +
+                         $"platform={platform} resolved='{resolved}' fallback='{fallback}'");
+            }
+
+            return (string.IsNullOrEmpty(resolved) || looksLikeRawId) ? fallback : resolved;
         }
-        catch
+        catch (Exception ex)
         {
-            return player.Character.GetType().Name;
+            SoulLinkLog.Error($"GetPlayerName slot={slot} netId={netId} crashed: {ex.Message}");
+            return fallback;
         }
     }
 

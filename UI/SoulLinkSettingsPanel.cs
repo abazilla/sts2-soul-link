@@ -1,6 +1,8 @@
 using System;
 using Godot;
 
+using SoulLinkMod;
+
 namespace SoulLinkMod.UI;
 
 /// <summary>
@@ -22,11 +24,14 @@ public class SoulLinkSettingsPanel : Control
     private const float RightMargin   = 16f;
     private const float TopMargin     = 16f;
 
-    // Colours (matching the rest of the mod's palette)
-    private static readonly Color ColHeader     = new Color("cccccc");
-    private static readonly Color ColSection    = new Color("888888");
+    // Palette sampled from the vanilla STS2 character/relic tooltip card.
+    private static readonly Color ColAccentYellow = new Color("efc851"); // gold-tinted accent
+    private static readonly Color ColHpGreen      = new Color("4ec94e"); // HP green
+    private static readonly Color ColOffWhite     = new Color("e8e0c8"); // descriptor body
+    private static readonly Color ColHeader     = ColAccentYellow;
+    private static readonly Color ColSection    = ColAccentYellow;
     private static readonly Color ColDisabled   = new Color("555555");
-    private static readonly Color ColDescriptor = new Color("666666");
+    private static readonly Color ColDescriptor = ColOffWhite;
     private static readonly Color ColBg         = new Color(0f, 0f, 0f, 0.72f);
 
     private bool _isClientMode; // true = client; run settings are read-only
@@ -34,6 +39,7 @@ public class SoulLinkSettingsPanel : Control
     private MarginContainer? _margin; // root layout container; drives panel height
 
     // Run setting controls
+    private OptionButton? _hpModeOption;
     private CheckBox?     _cbSplitMaxHp;
     private CheckBox?     _cbSplitHeal;
     private OptionButton? _goldModeOption;
@@ -45,8 +51,9 @@ public class SoulLinkSettingsPanel : Control
     private CheckBox? _cbShowDebugOverlay;
 
     // Descriptor labels for run settings (need to gray out when disabled)
-    private Label? _descSplitMaxHp;
-    private Label? _descSplitHeal;
+    private Label? _descHpMode;
+    private RichTextLabel? _descSplitMaxHp;
+    private RichTextLabel? _descSplitHeal;
     private Label? _descGoldMode;  // dynamic — text changes with selection
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -76,7 +83,7 @@ public class SoulLinkSettingsPanel : Control
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] SoulLinkSettingsPanel.Initialize crashed: {ex}");
+            SoulLinkLog.Error($"SoulLinkSettingsPanel.Initialize crashed: {ex}");
         }
     }
 
@@ -89,6 +96,7 @@ public class SoulLinkSettingsPanel : Control
         _isClientMode = !isHost;
         Visible = true;
         Refresh();
+        SoulLinkLog.Debug($"[SyncDiag] Panel.Show isHost={isHost}");
         // Notify connected clients of current host settings as soon as the lobby is ready.
         if (isHost) SoulLinkSession.TrySendSettingsSync();
     }
@@ -100,7 +108,7 @@ public class SoulLinkSettingsPanel : Control
     public void Refresh()
     {
         try { DoRefresh(); }
-        catch (Exception ex) { GD.PrintErr($"[SoulLink] SoulLinkSettingsPanel.Refresh crashed: {ex}"); }
+        catch (Exception ex) { SoulLinkLog.Error($"SoulLinkSettingsPanel.Refresh crashed: {ex}"); }
     }
 
     public static void Clear() => Current = null;
@@ -114,12 +122,6 @@ public class SoulLinkSettingsPanel : Control
 
     private void BuildUi()
     {
-        // Semi-transparent background
-        var bg = new ColorRect { Color = ColBg };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        bg.MouseFilter = MouseFilterEnum.Ignore;
-        AddChild(bg);
-
         _margin = new MarginContainer();
         _margin.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         _margin.AddThemeConstantOverride("margin_left",   10);
@@ -135,37 +137,78 @@ public class SoulLinkSettingsPanel : Control
         margin.AddChild(vbox);
 
         // Header
-        var header = MakeLabel($"SOUL LINK  v{SoulLinkMod.Version}", ColHeader, 18);
+        var header = MakeLabel($"Soul Link Settings (v{SoulLinkMod.Version})", ColHeader, 18);
         vbox.AddChild(header);
-        vbox.AddChild(MakeSeparator());
+        vbox.AddChild(MakeSpacer(8));
 
         // ── Run Settings ──────────────────────────────────────────────────────
-        vbox.AddChild(MakeLabel("  RUN SETTINGS  (host only)", ColSection, 16));
+        vbox.AddChild(MakeLabel("  HP MODE (host only):", ColAccentYellow, 16));
+
+        _hpModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
+        _hpModeOption.AddItem("Shared HP pool",       (int)HpMode.SharedPool);
+        _hpModeOption.AddItem("Default",        (int)HpMode.Vanilla);
+        // _hpModeOption.AddItem("Shared HP & Block Pool",     (int)HpMode.SharedBlockSharedPool);
+        _hpModeOption.AddThemeFontSizeOverride("font_size", 17);
+        ApplyOptionButtonAccent(_hpModeOption, ColAccentYellow);
+        SoulLinkFont.Apply(_hpModeOption);
+        {
+            var hpModePopup = _hpModeOption.GetPopup();
+            SoulLinkFont.Apply(hpModePopup);
+            hpModePopup.AddThemeFontSizeOverride("font_size", 17);
+            // Disable SharedBlockSharedPool — not yet implemented.
+            // int sbspIdx = _hpModeOption.GetItemIndex((int)HpMode.SharedBlockSharedPool);
+            // if (sbspIdx >= 0)
+            // {
+            //     _hpModeOption.SetItemDisabled(sbspIdx, true);
+            //     _hpModeOption.SetItemText(sbspIdx, "Shared HP & Block Pool  (coming soon)");
+            // }
+        }
+        _hpModeOption.ItemSelected += idx =>
+        {
+            if (_refreshing) return;
+            var mode = (HpMode)_hpModeOption.GetItemId((int)idx);
+            SoulLinkLog.Debug($"[SyncDiag] Toggled HpMode={mode} isClient={_isClientMode}");
+            if (mode == HpMode.SharedBlockSharedPool) { DoRefresh(); return; } // revert
+            SoulLinkSettings.Instance.HpMode = mode;
+            SoulLinkSettings.Save();
+            if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
+            if (_descHpMode != null) _descHpMode.Text = HpModeDescriptor(mode);
+            DoRefresh();
+        };
+        vbox.AddChild(Indent(_hpModeOption));
+        _descHpMode = MakeDescriptor(HpModeDescriptor(SoulLinkSettings.Instance.HpMode));
+        vbox.AddChild(WrapDescriptor(_descHpMode));
 
         _cbSplitMaxHp = MakeCheckBox("Split MaxHP changes by players");
-        _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
-        vbox.AddChild(_cbSplitMaxHp);
-        _descSplitMaxHp = MakeDescriptor("eg +10 MaxHP -> +5 MaxHP to the MaxHP pool (for 2 players)");
-        vbox.AddChild(WrapDescriptor(_descSplitMaxHp));
+        _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitMaxHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        vbox.AddChild(Indent(_cbSplitMaxHp));
+        _descSplitMaxHp = MakeRichDescriptor(
+            $"eg [color=#{ColHpGreen.ToHtml(false)}]+10 MaxHP[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5 MaxHP[/color] to the MaxHP pool (for 2 players)");
+        vbox.AddChild(WrapDescriptorControl(_descSplitMaxHp));
 
         _cbSplitHeal = MakeCheckBox("Split healing by players");
-        _cbSplitHeal.Toggled += on => { if (_refreshing) return; SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
-        vbox.AddChild(_cbSplitHeal);
-        _descSplitHeal = MakeDescriptor("eg +10 Healing -> +5 Healing to the shared HP pool (for 2 players)");
-        vbox.AddChild(WrapDescriptor(_descSplitHeal));
+        _cbSplitHeal.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitHeal={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        vbox.AddChild(Indent(_cbSplitHeal));
+        _descSplitHeal = MakeRichDescriptor(
+            $"eg [color=#{ColHpGreen.ToHtml(false)}]+10[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] to the shared HP pool (for 2 players)");
+        vbox.AddChild(WrapDescriptorControl(_descSplitHeal));
 
-        vbox.AddChild(MakeLabel("  GOLD MODE:", ColSection, 16));
+        vbox.AddChild(MakeSpacer(12));
+        vbox.AddChild(MakeLabel("  GOLD MODE (host only):", ColSection, 16));
 
         _goldModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
-        _goldModeOption.AddItem("Default (STS2 native)",    (int)GoldSharingMode.Default);
-        _goldModeOption.AddItem("Share gold pool",          (int)GoldSharingMode.SharedPool);
-        _goldModeOption.AddItem("Split gold by players",    (int)GoldSharingMode.SplitByPlayer);
+        _goldModeOption.AddItem("Shared Gold pool",          (int)GoldSharingMode.SharedPool);
+        _goldModeOption.AddItem("Default",    (int)GoldSharingMode.Default);
+        // Turning this off for now - to add in the future
+        // _goldModeOption.AddItem("Shared, Split Gold by players",    (int)GoldSharingMode.SplitByPlayer);
         _goldModeOption.AddThemeFontSizeOverride("font_size", 17);
+        ApplyOptionButtonAccent(_goldModeOption, ColAccentYellow);
         SoulLinkFont.Apply(_goldModeOption);
         _goldModeOption.ItemSelected += idx =>
         {
             if (_refreshing) return;
             var mode = (GoldSharingMode)_goldModeOption.GetItemId((int)idx);
+            SoulLinkLog.Debug($"[SyncDiag] Toggled GoldMode={mode} isClient={_isClientMode}");
             SoulLinkSettings.Instance.GoldMode = mode;
             SoulLinkSettings.Save();
             if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
@@ -174,33 +217,28 @@ public class SoulLinkSettingsPanel : Control
         var popup = _goldModeOption.GetPopup();
         SoulLinkFont.Apply(popup);
         popup.AddThemeFontSizeOverride("font_size", 17);
-        vbox.AddChild(_goldModeOption);
+        vbox.AddChild(Indent(_goldModeOption));
         _descGoldMode = MakeDescriptor(GoldModeDescriptor(SoulLinkSettings.Instance.GoldMode));
         vbox.AddChild(WrapDescriptor(_descGoldMode));
 
-        _cbSharedLoseHp = MakeCheckBox("Shared lose-HP effects");
-        _cbSharedLoseHp.Toggled += on => { SoulLinkSettings.Instance.SharedLoseHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
-        vbox.AddChild(_cbSharedLoseHp);
-
-        vbox.AddChild(MakeSeparator());
+        // Turning this off - only valid for legacy networking, already works for VGQ
+        // _cbSharedLoseHp = MakeCheckBox("Shared lose-HP effects");
+        // _cbSharedLoseHp.Toggled += on => { SoulLinkLog.Debug($"[SyncDiag] Toggled SharedLoseHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SharedLoseHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
+        // vbox.AddChild(_cbSharedLoseHp);
 
         // ── Panel Settings ────────────────────────────────────────────────────
-        vbox.AddChild(MakeLabel("  PANELS  (local)", ColSection, 16));
+        vbox.AddChild(MakeSpacer(12));
+        vbox.AddChild(MakeLabel("  PANELS (local):", ColSection, 16));
 
         _cbShowCombatLog = MakeCheckBox("Show Soul Link Feed");
         _cbShowCombatLog.Toggled += on => { SoulLinkSettings.Instance.ShowCombatLog = on; SoulLinkSettings.Save(); };
-        vbox.AddChild(_cbShowCombatLog);
+        vbox.AddChild(Indent(_cbShowCombatLog));
         vbox.AddChild(WrapDescriptor(MakeDescriptor("Show recent events")));
-
-        _cbShowRunStats = MakeCheckBox("Show Run Stats");
-        _cbShowRunStats.Toggled += on => { SoulLinkSettings.Instance.ShowRunStats = on; SoulLinkSettings.Save(); };
-        vbox.AddChild(_cbShowRunStats);
-        vbox.AddChild(WrapDescriptor(MakeDescriptor("Panel showing stats for all players")));
 
         _cbShowDebugOverlay = MakeCheckBox("Show Debug Overlay");
         _cbShowDebugOverlay.Toggled += on => { SoulLinkSettings.Instance.ShowDebugOverlay = on; SoulLinkSettings.Save(); };
-        vbox.AddChild(_cbShowDebugOverlay);
-        vbox.AddChild(WrapDescriptor(MakeDescriptor("Developer info \u2014 safe to leave off")));
+        vbox.AddChild(Indent(_cbShowDebugOverlay));
+        vbox.AddChild(WrapDescriptor(MakeDescriptor("Developer info")));
 
     }
 
@@ -216,12 +254,15 @@ public class SoulLinkSettingsPanel : Control
     {
         bool runActive   = SoulLinkSession.IsActive;
         bool runEditable = !_isClientMode && !runActive;
+        SoulLinkLog.Debug($"[SyncDiag] DoRefreshInner: isClient={_isClientMode} runActive={runActive} pending={SoulLinkSession.PendingSyncedRunSettings.HasValue}");
 
         // Decide which values to display:
         // - Client during active run: show locked ActiveRunSettings from host.
-        // - Everyone else: show current SoulLinkSettings.
+        // - Client pre-run: show host's most-recent sync if we have one, else fall back to local.
+        // - Host: show local SoulLinkSettings.
         bool splitMaxHp, splitHeal, sharedLoseHp;
         GoldSharingMode goldMode;
+        HpMode hpMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
@@ -229,6 +270,16 @@ public class SoulLinkSettingsPanel : Control
             splitHeal    = rs.SplitHeal;
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
+            hpMode       = rs.HpMode;
+        }
+        else if (_isClientMode && SoulLinkSession.PendingSyncedRunSettings.HasValue)
+        {
+            var rs = SoulLinkSession.PendingSyncedRunSettings.Value;
+            splitMaxHp   = rs.SplitMaxHp;
+            splitHeal    = rs.SplitHeal;
+            goldMode     = rs.GoldMode;
+            sharedLoseHp = rs.SharedLoseHp;
+            hpMode       = rs.HpMode;
         }
         else
         {
@@ -237,45 +288,82 @@ public class SoulLinkSettingsPanel : Control
             splitHeal    = s.SplitHeal;
             goldMode     = s.GoldMode;
             sharedLoseHp = s.SharedLoseHp;
+            hpMode       = s.HpMode;
         }
 
-        SetCheckBox(_cbSplitMaxHp, splitMaxHp, runEditable);
-        SetDescriptor(_descSplitMaxHp, runEditable);
-        SetCheckBox(_cbSplitHeal,  splitHeal,  runEditable);
-        SetDescriptor(_descSplitHeal, runEditable);
-        SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, runEditable);
+        // HP-related settings are ignored when HpMode == Vanilla; grey them out.
+        bool hpAxisEditable   = runEditable && hpMode != HpMode.Vanilla;
+        // Gold settings are independent of HpMode; editable whenever the run is editable.
+        bool goldAxisEditable = runEditable;
+        // Client sees host's values read-only — render at full brightness so values stay
+        // legible. Host (non-client) keeps the standard greyed-disabled look.
+        Color lockedTint = _isClientMode ? Colors.White : ColDisabled;
+
+        if (_hpModeOption != null)
+        {
+            int lmIdx = _hpModeOption.GetItemIndex((int)hpMode);
+            if (lmIdx >= 0) _hpModeOption.Selected = lmIdx;
+            _hpModeOption.Disabled = !runEditable;
+            _hpModeOption.Modulate = runEditable
+                ? Colors.White
+                : new Color(lockedTint.R, lockedTint.G, lockedTint.B, 1f);
+        }
+        if (_descHpMode != null)
+        {
+            _descHpMode.Text = HpModeDescriptor(hpMode);
+            SetDescriptor(_descHpMode, runEditable, lockedTint);
+        }
+
+        // Vanilla HpMode ignores all HP-axis settings — hide them entirely (host + client).
+        bool hpAxisVisible = hpMode != HpMode.Vanilla;
+        SetRowVisible(_cbSplitMaxHp, _descSplitMaxHp, hpAxisVisible);
+        SetRowVisible(_cbSplitHeal,  _descSplitHeal,  hpAxisVisible);
+        SetRowVisible(_cbSharedLoseHp, null,          hpAxisVisible);
+
+        SetCheckBox(_cbSplitMaxHp, splitMaxHp, hpAxisEditable, lockedTint);
+        SetDescriptor(_descSplitMaxHp, hpAxisEditable, lockedTint);
+        SetCheckBox(_cbSplitHeal,  splitHeal,  hpAxisEditable, lockedTint);
+        SetDescriptor(_descSplitHeal, hpAxisEditable, lockedTint);
+        SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, hpAxisEditable, lockedTint);
 
         if (_goldModeOption != null)
         {
             int itemIdx = _goldModeOption.GetItemIndex((int)goldMode);
             if (itemIdx >= 0) _goldModeOption.Selected = itemIdx;
-            _goldModeOption.Disabled = !runEditable;
-            _goldModeOption.Modulate = runEditable
+            _goldModeOption.Disabled = !goldAxisEditable;
+            _goldModeOption.Modulate = goldAxisEditable
                 ? Colors.White
-                : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 1f);
+                : new Color(lockedTint.R, lockedTint.G, lockedTint.B, 1f);
         }
         if (_descGoldMode != null)
         {
             _descGoldMode.Text = GoldModeDescriptor(goldMode);
-            SetDescriptor(_descGoldMode, runEditable);
+            SetDescriptor(_descGoldMode, goldAxisEditable, lockedTint);
         }
 
         // Panel settings are always locally editable.
         var ls = SoulLinkSettings.Instance;
-        SetCheckBox(_cbShowCombatLog,    ls.ShowCombatLog,    editable: true);
-        SetCheckBox(_cbShowRunStats,     ls.ShowRunStats,     editable: true);
-        SetCheckBox(_cbShowDebugOverlay, ls.ShowDebugOverlay, editable: true);
+        SetCheckBox(_cbShowCombatLog,    ls.ShowCombatLog,    editable: true,  lockedTint);
+        SetCheckBox(_cbShowRunStats,     ls.ShowRunStats,     editable: true,  lockedTint);
+        SetCheckBox(_cbShowDebugOverlay, ls.ShowDebugOverlay, editable: true,  lockedTint);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>Sets a checkbox's checked state and editable state without triggering the Toggled signal.</summary>
-    private static void SetCheckBox(CheckBox? cb, bool value, bool editable)
+    private static void SetCheckBox(CheckBox? cb, bool value, bool editable, Color lockedTint)
     {
         if (cb == null) return;
         cb.SetPressedNoSignal(value);
         cb.Disabled = !editable;
-        cb.Modulate = editable ? Colors.White : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 1f);
+        // Client lock (lockedTint == white) keeps yellow text legible but slightly dimmed.
+        // Host run-lock uses the grey lockedTint at full alpha to read as disabled.
+        bool clientLock = !editable && lockedTint.R >= 0.99f && lockedTint.G >= 0.99f && lockedTint.B >= 0.99f;
+        cb.Modulate = editable
+            ? Colors.White
+            : clientLock
+                ? new Color(1f, 1f, 1f, 0.75f)
+                : new Color(lockedTint.R, lockedTint.G, lockedTint.B, 1f);
     }
 
     private Label MakeLabel(string text, Color color, int fontSize = 17)
@@ -287,9 +375,14 @@ public class SoulLinkSettingsPanel : Control
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         lbl.AddThemeFontSizeOverride("font_size", fontSize);
+        // Black outline around heading text for readability over arbitrary backgrounds.
+        lbl.AddThemeConstantOverride("outline_size", 6);
+        lbl.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
         SoulLinkFont.Apply(lbl);
         return lbl;
     }
+
+    private static readonly Color ColCheckOutline = ColAccentYellow;
 
     private CheckBox MakeCheckBox(string text)
     {
@@ -299,16 +392,154 @@ public class SoulLinkSettingsPanel : Control
             FocusMode  = FocusModeEnum.None,
         };
         cb.AddThemeFontSizeOverride("font_size", 17);
+        TintCheckBox(cb, ColAccentYellow);
+        // Black text outline so checkbox labels read over arbitrary backgrounds.
+        cb.AddThemeConstantOverride("outline_size", 6);
+        cb.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.95f));
+        ApplyCheckBoxOutline(cb);
         SoulLinkFont.Apply(cb);
         return cb;
     }
 
-    private static MarginContainer WrapDescriptor(Label lbl)
+    /// <summary>Tints the OptionButton's main text and popup items.</summary>
+    private static void ApplyOptionButtonAccent(OptionButton btn, Color color)
+    {
+        var outline = new Color(0f, 0f, 0f, 0.95f);
+        btn.AddThemeColorOverride("font_color",         color);
+        btn.AddThemeColorOverride("font_hover_color",   color);
+        btn.AddThemeColorOverride("font_focus_color",   color);
+        btn.AddThemeColorOverride("font_pressed_color", color);
+        btn.AddThemeConstantOverride("outline_size", 6);
+        btn.AddThemeColorOverride("font_outline_color", outline);
+        var popup = btn.GetPopup();
+        popup.AddThemeColorOverride("font_color",          color);
+        popup.AddThemeColorOverride("font_hover_color",    color);
+        popup.AddThemeColorOverride("font_focus_color",    color);
+        popup.AddThemeColorOverride("font_disabled_color", new Color(color.R, color.G, color.B, 0.5f));
+        popup.AddThemeConstantOverride("outline_size", 6);
+        popup.AddThemeColorOverride("font_outline_color", outline);
+    }
+
+    /// <summary>Tints a CheckBox label color (all interaction states).</summary>
+    private static void TintCheckBox(CheckBox cb, Color color)
+    {
+        // Brighten hover/pressed text so the highlight is visible regardless of toggle.
+        // Without this the hover state is identical to normal and nothing changes on
+        // hover when the box is unchecked (icon also doesn't swap).
+        var hover = Lighten(color, 0.4f);
+        cb.AddThemeColorOverride("font_color",          color);
+        cb.AddThemeColorOverride("font_hover_color",    hover);
+        cb.AddThemeColorOverride("font_hover_pressed_color", hover);
+        cb.AddThemeColorOverride("font_pressed_color",  hover);
+        cb.AddThemeColorOverride("font_focus_color",    color);
+        cb.AddThemeColorOverride("font_disabled_color", new Color(color.R, color.G, color.B, 0.55f));
+    }
+
+    private static Color Lighten(Color c, float t) =>
+        new Color(c.R + (1f - c.R) * t, c.G + (1f - c.G) * t, c.B + (1f - c.B) * t, c.A);
+
+    /// <summary>
+    /// Adds a yellow outline border around the CheckBox indicator while preserving
+    /// the vanilla tick artwork. We fetch the theme's existing checked/unchecked
+    /// textures and composite each onto a transparent canvas with a yellow border
+    /// painted around the perimeter.
+    /// </summary>
+    private static void ApplyCheckBoxOutline(CheckBox cb)
+    {
+        foreach (var name in new[] {
+            "checked", "unchecked",
+            "checked_disabled", "unchecked_disabled",
+            "radio_checked", "radio_unchecked",
+            "radio_checked_disabled", "radio_unchecked_disabled",
+        })
+        {
+            var src = cb.GetThemeIcon(name, "CheckBox");
+            if (src == null) continue;
+            var outlined = BuildOutlinedIcon(src);
+            if (outlined != null) cb.AddThemeIconOverride(name, outlined);
+        }
+    }
+
+    private static ImageTexture? BuildOutlinedIcon(Texture2D src)
+    {
+        try
+        {
+            var srcImg = src.GetImage();
+            if (srcImg == null) return null;
+            if (srcImg.GetFormat() != Image.Format.Rgba8)
+                srcImg.Convert(Image.Format.Rgba8);
+
+            int w = srcImg.GetWidth();
+            int h = srcImg.GetHeight();
+            const int border = 1;
+            const int inset  = 2; // shrinks the tick area inside the canvas
+
+            // Output canvas same size as vanilla — visual box becomes (inset*2) smaller.
+            var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+            img.Fill(new Color(0, 0, 0, 0));
+
+            // Scale vanilla tick into the inset region.
+            int innerW = System.Math.Max(1, w - inset * 2);
+            int innerH = System.Math.Max(1, h - inset * 2);
+            var scaled = (Image)srcImg.Duplicate();
+            scaled.Resize(innerW, innerH, Image.Interpolation.Bilinear);
+            img.BlitRect(scaled, new Rect2I(0, 0, innerW, innerH), new Vector2I(inset, inset));
+
+            // 1px yellow border around the inset box.
+            int x0 = inset - border;
+            int y0 = inset - border;
+            int x1 = w - inset + border - 1;
+            int y1 = h - inset + border - 1;
+            for (int x = x0; x <= x1; x++)
+            {
+                if (x >= 0 && x < w)
+                {
+                    if (y0 >= 0)     img.SetPixel(x, y0, ColCheckOutline);
+                    if (y1 < h)      img.SetPixel(x, y1, ColCheckOutline);
+                }
+            }
+            for (int y = y0; y <= y1; y++)
+            {
+                if (y >= 0 && y < h)
+                {
+                    if (x0 >= 0)     img.SetPixel(x0, y, ColCheckOutline);
+                    if (x1 < w)      img.SetPixel(x1, y, ColCheckOutline);
+                }
+            }
+            return ImageTexture.CreateFromImage(img);
+        }
+        catch (Exception ex)
+        {
+            SoulLinkLog.Error($"BuildOutlinedIcon failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private const int IndentPx           = 16;
+    // = IndentPx + indicator width + h_separation, so descriptor lines up under the
+    // checkbox label text instead of under the box itself.
+    private const int DescriptorIndentPx = 40;
+
+    /// <summary>Wraps a control in a MarginContainer with a fixed left indent.</summary>
+    private static MarginContainer Indent(Control c, int left = IndentPx)
     {
         var m = new MarginContainer();
-        m.AddThemeConstantOverride("margin_left", 20);
-        m.AddChild(lbl);
+        m.AddThemeConstantOverride("margin_left", left);
+        m.AddChild(c);
         return m;
+    }
+
+    private static MarginContainer WrapDescriptor(Label lbl) => WrapDescriptorControl(lbl);
+
+    private static MarginContainer WrapDescriptorControl(Control c) => Indent(c, DescriptorIndentPx);
+
+    private static void ApplyDescriptorShadow(Control c)
+    {
+        // Drop shadow under descriptor body text for readability without a panel bg.
+        c.AddThemeConstantOverride("shadow_offset_x", 1);
+        c.AddThemeConstantOverride("shadow_offset_y", 1);
+        c.AddThemeConstantOverride("shadow_outline_size", 0);
+        c.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.85f));
     }
 
     private Label MakeDescriptor(string text)
@@ -320,14 +551,60 @@ public class SoulLinkSettingsPanel : Control
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         lbl.AddThemeFontSizeOverride("font_size", 15);
+        ApplyDescriptorShadow(lbl);
         SoulLinkFont.Apply(lbl);
         return lbl;
     }
 
-    private static void SetDescriptor(Label? lbl, bool editable)
+    /// <summary>
+    /// Returns a RichTextLabel for descriptor lines that need per-segment color via
+    /// BBCode (e.g. green "+10" / "Healing" inside off-white prose). The Modulate is
+    /// kept white so BBCode colors render true; SetDescriptor still works to grey it.
+    /// </summary>
+    private RichTextLabel MakeRichDescriptor(string bbcode)
+    {
+        var lbl = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            FitContent    = true,
+            ScrollActive  = false,
+            AutowrapMode  = TextServer.AutowrapMode.WordSmart,
+            MouseFilter   = MouseFilterEnum.Ignore,
+        };
+        lbl.AddThemeFontSizeOverride("normal_font_size", 15);
+        lbl.AddThemeColorOverride("default_color", ColDescriptor);
+        ApplyDescriptorShadow(lbl);
+        SoulLinkFont.Apply(lbl);
+        lbl.Text = bbcode;
+        return lbl;
+    }
+
+    private static void SetDescriptor(Label? lbl, bool editable, Color lockedTint)
     {
         if (lbl == null) return;
-        lbl.Modulate = editable ? ColDescriptor : new Color(ColDisabled.R, ColDisabled.G, ColDisabled.B, 0.7f);
+        lbl.Modulate = editable ? ColDescriptor : new Color(lockedTint.R, lockedTint.G, lockedTint.B, 0.85f);
+    }
+
+    private static void SetDescriptor(RichTextLabel? lbl, bool editable, Color lockedTint)
+    {
+        if (lbl == null) return;
+        // BBCode segments carry their own colors — when editable, keep Modulate white
+        // so green stays green. When locked, multiply by lockedTint to grey the whole row.
+        lbl.Modulate = editable ? Colors.White : new Color(lockedTint.R, lockedTint.G, lockedTint.B, 0.85f);
+    }
+
+    /// <summary>
+    /// Toggles visibility of a checkbox + (optional) descriptor wrapper as a unit. The
+    /// descriptor lives in a MarginContainer parent — hide the parent so the row
+    /// collapses with no empty margin.
+    /// </summary>
+    private static void SetRowVisible(CheckBox? cb, Control? descriptor, bool visible)
+    {
+        // Both controls live inside a MarginContainer (indent / descriptor wrapper). Hide
+        // the wrapper itself so the VBox collapses cleanly instead of leaving margins.
+        if (cb?.GetParent() is Control cbWrapper) cbWrapper.Visible = visible;
+        else if (cb != null) cb.Visible = visible;
+        if (descriptor?.GetParent() is Control descWrapper) descWrapper.Visible = visible;
     }
 
     private void UpdateHeight()
@@ -336,18 +613,26 @@ public class SoulLinkSettingsPanel : Control
         OffsetBottom = OffsetTop + _margin.GetCombinedMinimumSize().Y;
     }
 
-    private static string GoldModeDescriptor(GoldSharingMode mode) => mode switch
+    private static string HpModeDescriptor(HpMode mode) => mode switch
     {
-        GoldSharingMode.SharedPool    => "Gold earned AND spent is taken from the shared gold pool",
-        GoldSharingMode.SplitByPlayer => "Gold earned is split, but is spent individually",
-        _                             => "Each player earns and spends gold on their own",
+        HpMode.Vanilla                => "Default, unmodded behavior",
+        HpMode.SharedBlockSharedPool  => "Coming soon",
+        _                             => "Shared HP pool across all players",
     };
 
-    private static HSeparator MakeSeparator()
+    private static string GoldModeDescriptor(GoldSharingMode mode) => mode switch
     {
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("separation_color", new Color("333333"));
-        return sep;
+        GoldSharingMode.SharedPool    => "All players share gold",
+        GoldSharingMode.SplitByPlayer => "Gold earned is split evenly amongst players, but is spent individually",
+        _                             => "Default, unmodded behavior",
+    };
+
+    private static Control MakeSpacer(int height)
+    {
+        var c = new Control();
+        c.CustomMinimumSize = new Vector2(0, height);
+        c.MouseFilter = MouseFilterEnum.Ignore;
+        return c;
     }
 
 }

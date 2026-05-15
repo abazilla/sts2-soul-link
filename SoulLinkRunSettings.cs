@@ -20,7 +20,7 @@ public struct SoulLinkRunSettings
     /// </summary>
     public bool SplitHeal;
 
-    /// <summary>How gold is managed between players.</summary>
+    /// <summary>How gold is managed between players. Independent of <see cref="HpMode"/>.</summary>
     public GoldSharingMode GoldMode;
 
     /// <summary>
@@ -29,12 +29,20 @@ public struct SoulLinkRunSettings
     /// </summary>
     public bool SharedLoseHp;
 
+    /// <summary>
+    /// Controls HP/MaxHp sync for this run. When Vanilla, HP/MaxHp sync is suppressed
+    /// and STS2 handles HP natively. Gold is unaffected by this setting.
+    /// Defaults to SharedPool to preserve existing behaviour on old saves.
+    /// </summary>
+    public HpMode HpMode;
+
     /// <summary>Returns a SoulLinkRunSettings with the recommended defaults.</summary>
     public static SoulLinkRunSettings Default => new SoulLinkRunSettings
     {
         SplitMaxHp   = true,
         SplitHeal    = true,
         GoldMode     = GoldSharingMode.Default,
-        SharedLoseHp = false,
+        SharedLoseHp = true,
+        HpMode       = HpMode.SharedPool,
     };
 }

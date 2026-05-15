@@ -18,8 +18,12 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
     /// <summary>Cast of <see cref="GoldSharingMode"/> — serialized as int for wire format.</summary>
     public int GoldMode;
     public bool SharedLoseHp;
+    /// <summary>Cast of <see cref="HpMode"/> — serialized as int for wire format. Defaults to SharedPool if absent (old peer).</summary>
+    public int HpMode;
 
-    public bool ShouldBroadcast => false;
+    // Host -> all clients. Must be true so multi-client lobbies receive the sync on every peer,
+    // not just one. Receiver guards against self-apply when running on the host.
+    public bool ShouldBroadcast => true;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 
@@ -29,6 +33,7 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
         writer.WriteBool(SplitHeal);
         writer.WriteInt(GoldMode);
         writer.WriteBool(SharedLoseHp);
+        writer.WriteInt(HpMode);
     }
 
     public void Deserialize(PacketReader reader)
@@ -37,5 +42,8 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
         SplitHeal    = reader.ReadBool();
         GoldMode     = reader.ReadInt();
         SharedLoseHp = reader.ReadBool();
+        // HpMode added after initial release; default to SharedPool (0) if the stream ends early.
+        try { HpMode = reader.ReadInt(); }
+        catch { HpMode = 0; }
     }
 }

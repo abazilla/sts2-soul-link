@@ -42,11 +42,12 @@ public class SoulLinkSettings
     /// when a teammate takes unblocked damage.
     /// </summary>
     public bool SharedLoseHp { get; set; } = true;
+    public HpMode HpMode { get; set; } = HpMode.SharedPool;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
     public bool ShowCombatLog    { get; set; } = true;
-    public bool ShowRunStats     { get; set; } = true;
+    public bool ShowRunStats     { get; set; } = false;
     public bool ShowDebugOverlay { get; set; } = false;
 
     // ── Helper ────────────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ public class SoulLinkSettings
         SplitHeal    = SplitHeal,
         GoldMode     = GoldMode,
         SharedLoseHp = SharedLoseHp,
+        HpMode       = HpMode,
     };
 
     // ── Persistence ───────────────────────────────────────────────────────────
@@ -84,17 +86,17 @@ public class SoulLinkSettings
                 string json = File.ReadAllText(SettingsPath);
                 _instance = JsonSerializer.Deserialize<SoulLinkSettings>(json, _jsonOptions)
                             ?? new SoulLinkSettings();
-                GD.Print("[SoulLink] Settings loaded.");
+                SoulLinkLog.Debug("Settings loaded.");
                 return;
             }
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to load settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to load settings: {ex.Message}");
         }
 
         _instance = new SoulLinkSettings();
-        GD.Print("[SoulLink] Using default settings.");
+        SoulLinkLog.Debug("Using default settings.");
     }
 
     public static void Save()
@@ -106,7 +108,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to save settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to save settings: {ex.Message}");
         }
     }
 
@@ -123,7 +125,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to save run settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to save run settings: {ex.Message}");
         }
     }
 
@@ -143,7 +145,7 @@ public class SoulLinkSettings
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[SoulLink] Failed to load run settings: {ex.Message}");
+            SoulLinkLog.Error($"Failed to load run settings: {ex.Message}");
         }
         return null;
     }

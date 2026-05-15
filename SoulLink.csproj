@@ -8,7 +8,13 @@
     <LangVersion>12.0</LangVersion>
     <AssemblyName>SoulLink</AssemblyName>
     <ModsPath Condition="'$(ModsPath)' == ''">$(STS2GameDir)\mods</ModsPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);issues/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dev-only tests; excluded from release build. Set IncludeTests=true to compile. -->
+    <Compile Remove="Tests/**" Condition="'$(IncludeTests)' != 'true'" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="sts2">

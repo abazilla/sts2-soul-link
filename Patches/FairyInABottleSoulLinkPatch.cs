@@ -23,7 +23,7 @@ public static class FairyInABottleSoulLinkPatch
         if (!__result) return; // Original already saving someone — nothing to do.
 
         if (!SoulLinkSession.IsActive) return;
-        if (!SoulLinkSession.ActiveRunSettings.SharedLoseHp) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode != HpMode.SharedPool) return;
 
         var owner = __instance.Owner?.Creature;
         if (owner == null || owner == creature) return;

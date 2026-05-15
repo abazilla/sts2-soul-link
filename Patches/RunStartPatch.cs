@@ -4,7 +4,11 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Actions;
+using SoulLinkMod.Messages;
 using SoulLinkMod.UI;
+
+using SoulLinkMod;
 
 namespace SoulLinkMod.Patches;
 
@@ -17,36 +21,67 @@ namespace SoulLinkMod.Patches;
 /// </summary>
 internal static class SettingsSyncHandler
 {
-    private static bool _registered;
-    // Track which NetService instance we registered on. The lobby and run-time game
-    // service are different objects — if the instance changes we must re-register on
-    // the new one even if _registered is already true.
-    private static object? _registeredNet;
+    // Run-time NetService (RunManager.Instance.NetService) — null until run starts.
+    private static bool _registeredRun;
+    private static object? _registeredRunNet;
+    // Lobby-phase NetService (captured by LobbyNetCapture from StartRunLobby /
+    // LoadRunLobby / JoinFlow). Different object from the run-time service.
+    private static bool _registeredLobby;
+    private static object? _registeredLobbyNet;
+
+    static SettingsSyncHandler()
+    {
+        // Re-attempt registration whenever a lobby service is captured for the first
+        // time (or replaced). CharSelectClientInitPatch may have called TryRegister
+        // before any service existed; this fires the moment one appears.
+        LobbyNetCapture.OnCaptured += TryRegister;
+    }
 
     /// <summary>
-    /// Registers the handler on the current NetService. Safe to call multiple times
-    /// (lobby init, run start). Re-registers automatically when the NetService instance
-    /// changes (e.g. lobby service → run-time game service transition).
+    /// Registers the handler on whichever NetService instances are currently reachable
+    /// (run-time and/or lobby). Safe to call repeatedly — only registers when the
+    /// underlying service instance changes.
     /// </summary>
     internal static void TryRegister()
     {
-        var net = RunManager.Instance?.NetService;
-        if (net == null) return;
-        // Already registered on this exact instance — nothing to do.
-        if (_registered && ReferenceEquals(_registeredNet, net)) return;
-        net.RegisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
-        _registered = true;
-        _registeredNet = net;
-        GD.Print("[SoulLink] SettingsSyncHandler registered.");
+        var run = RunManager.Instance?.NetService;
+        if (run != null && !(_registeredRun && ReferenceEquals(_registeredRunNet, run)))
+        {
+            run.RegisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
+            _registeredRun = true;
+            _registeredRunNet = run;
+            SoulLinkLog.Debug($"[SyncDiag] TryRegister: REGISTERED on run net#{run.GetHashCode()} IsConnected={run.IsConnected}");
+        }
+
+        if (LobbyNetCapture.IsAvailable && !(_registeredLobby && ReferenceEquals(_registeredLobbyNet, LobbyNetCapture.Service)))
+        {
+            if (LobbyNetCapture.TryRegister<SoulLinkSettingsSyncMessage>(Handle))
+            {
+                _registeredLobby = true;
+                _registeredLobbyNet = LobbyNetCapture.Service;
+                SoulLinkLog.Debug($"[SyncDiag] TryRegister: REGISTERED on lobby net#{LobbyNetCapture.Service!.GetHashCode()}");
+            }
+        }
+
+        if (run == null && !LobbyNetCapture.IsAvailable)
+            SoulLinkLog.Debug("[SyncDiag] TryRegister: no net available (run=null, lobby=null).");
     }
 
-    /// <summary>Unregisters the handler if currently registered.</summary>
+    /// <summary>Unregisters the handler from any service it was registered on.</summary>
     internal static void TryUnregister()
     {
-        if (!_registered) return;
-        RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
-        _registered = false;
-        _registeredNet = null;
+        if (_registeredRun)
+        {
+            RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkSettingsSyncMessage>(Handle);
+            _registeredRun = false;
+            _registeredRunNet = null;
+        }
+        if (_registeredLobby)
+        {
+            LobbyNetCapture.TryUnregister<SoulLinkSettingsSyncMessage>(Handle);
+            _registeredLobby = false;
+            _registeredLobbyNet = null;
+        }
     }
 
     /// <summary>
@@ -54,12 +89,23 @@ internal static class SettingsSyncHandler
     /// </summary>
     internal static void Handle(SoulLinkSettingsSyncMessage message, ulong senderId)
     {
+        SoulLinkLog.Debug($"[SyncDiag] Handle ENTRY senderId={senderId} localId={LocalContext.NetId} IsActive={SoulLinkSession.IsActive} payload(HpMode={(HpMode)message.HpMode} GoldMode={(GoldSharingMode)message.GoldMode} SplitMaxHp={message.SplitMaxHp})");
+        // ShouldBroadcast=true means the host receives its own message. Host already owns
+        // the authoritative settings — ignore the echo so we don't clobber state with stale
+        // values on a re-entrant Refresh.
+        if (LocalContext.NetId.HasValue && senderId == LocalContext.NetId.Value)
+        {
+            SoulLinkLog.Debug("[SyncDiag] Handle: self-echo, skipping.");
+            return;
+        }
+
         var settings = new SoulLinkRunSettings
         {
             SplitMaxHp   = message.SplitMaxHp,
             SplitHeal    = message.SplitHeal,
             GoldMode     = (GoldSharingMode)message.GoldMode,
             SharedLoseHp = message.SharedLoseHp,
+            HpMode       = (HpMode)message.HpMode,
         };
 
         if (SoulLinkSession.IsActive)
@@ -67,6 +113,13 @@ internal static class SettingsSyncHandler
             // Normal path: run is already active on this peer, apply immediately.
             var prevGoldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
             SoulLinkSession.ActiveRunSettings = settings;
+
+            // Vanilla HpMode never routes through ApplyHpDelta, so the in-combat trigger
+            // that flips _initPhaseComplete never fires. Without this, AddEntry suppresses
+            // all gold log entries on clients whose local default differed from the host's
+            // Vanilla setting at OnRunStart time.
+            if (settings.HpMode == HpMode.Vanilla)
+                SoulLinkSession.MarkInitPhaseComplete();
 
             var runState = RunManager.Instance?.DebugOnlyGetState();
 
@@ -93,10 +146,170 @@ internal static class SettingsSyncHandler
             SoulLinkSession.PendingSyncedRunSettings = settings;
         }
 
-        GD.Print($"[SoulLink] Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, GoldMode={(GoldSharingMode)message.GoldMode}");
+        SoulLinkLog.Debug($"Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, GoldMode={(GoldSharingMode)message.GoldMode}, HpMode={(HpMode)message.HpMode}");
 
+        SoulLinkLog.Debug($"[SyncDiag] Handle: applied. PanelCurrent={(UI.SoulLinkSettingsPanel.Current != null)} -> Refresh()");
         // Refresh the settings panel on the client (read-only view).
         UI.SoulLinkSettingsPanel.Current?.Refresh();
+    }
+}
+
+internal static class GoldChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<GoldChangeSyncMessage>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        SoulLinkLog.Debug("GoldChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<GoldChangeSyncMessage>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(GoldChangeSyncMessage message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+        if (goldMode == GoldSharingMode.Default) return;
+
+        // In SharedPool mode, deterministic events (e.g. enemy gold steal) execute the same setter
+        // on both machines. Both sides apply the delta independently and broadcast an action.
+        // Check if this delta was already applied by a deterministic local setter (before the remote
+        // action arrived). If so, skip to avoid double-apply.
+        if (goldMode == GoldSharingMode.SharedPool &&
+            message.DeltaGold != 0 &&
+            GoldSyncPatch.TryConsumeCancellation(message.PlayerSlot, message.DeltaGold))
+        {
+            SoulLinkLog.Debug($"[GoldChangeAction] Consumed cancellation for slot={message.PlayerSlot} delta={message.DeltaGold}");
+            return;
+        }
+
+        // Mark this action as applied so the setter (if it fires after this handler) can recognize it.
+        if (goldMode == GoldSharingMode.SharedPool && message.DeltaGold != 0)
+        {
+            GoldSyncPatch.EnqueueNetworkApplied(message.PlayerSlot);
+        }
+
+        var action = new GoldChangeAction
+        {
+            DeltaGold = message.DeltaGold,
+            PlayerSlot = message.PlayerSlot,
+            Source = message.Source,
+            WasBlocked = message.WasBlocked,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
+    }
+}
+
+internal static class HpChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<HpChangeSyncMessage>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        SoulLinkLog.Debug("HpChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<HpChangeSyncMessage>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(HpChangeSyncMessage message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
+
+        // Skip during init phase (Neow) - it's deterministic, already processed locally.
+        if (!SoulLinkSession.IsInitPhaseComplete)
+        {
+            SoulLinkLog.Debug($"[HpHandler] Skipping during init phase: slot={message.PlayerSlot} delta={message.DeltaHp}");
+            return;
+        }
+
+        SoulLinkLog.Debug($"[HpHandler] Received: slot={message.PlayerSlot} delta={message.DeltaHp}");
+
+        // Dedup is handled atomically inside HpChangeAction.Execute() via SyncCoordinator.
+        var action = new HpChangeAction
+        {
+            DeltaHp = message.DeltaHp,
+            PlayerSlot = message.PlayerSlot,
+            InCombat = message.InCombat,
+            Source = message.Source,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
+    }
+}
+
+internal static class MaxHpChangeActionHandler
+{
+    private static bool _registered;
+    private static object? _registeredNet;
+
+    internal static void TryRegister()
+    {
+        var net = RunManager.Instance?.NetService;
+        if (net == null) return;
+        if (_registered && ReferenceEquals(_registeredNet, net)) return;
+        net.RegisterMessageHandler<MaxHpChangeSyncMessage>(Handle);
+        _registered = true;
+        _registeredNet = net;
+        SoulLinkLog.Debug("MaxHpChangeActionHandler registered.");
+    }
+
+    internal static void TryUnregister()
+    {
+        if (!_registered) return;
+        RunManager.Instance?.NetService?.UnregisterMessageHandler<MaxHpChangeSyncMessage>(Handle);
+        _registered = false;
+        _registeredNet = null;
+    }
+
+    internal static void Handle(MaxHpChangeSyncMessage message, ulong senderId)
+    {
+        if (!SoulLinkSession.IsActive) return;
+        if (SoulLinkSession.ActiveRunSettings.HpMode == HpMode.Vanilla) return;
+
+        // Skip during init phase (Neow) - it's deterministic, already processed locally.
+        if (!SoulLinkSession.IsInitPhaseComplete)
+        {
+            SoulLinkLog.Debug($"[MaxHpHandler] Skipping during init phase: slot={message.PlayerSlot} delta={message.DeltaMaxHp}");
+            return;
+        }
+
+        SoulLinkLog.Debug($"[MaxHpHandler] Received: slot={message.PlayerSlot} delta={message.DeltaMaxHp}");
+
+        // Dedup is handled atomically inside MaxHpChangeAction.Execute() via SyncCoordinator.
+        var action = new MaxHpChangeAction
+        {
+            DeltaMaxHp = message.DeltaMaxHp,
+            PlayerSlot = message.PlayerSlot,
+            InCombat = message.InCombat,
+            Source = message.Source,
+        };
+        NetActionService.ExecuteRemoteAction(action, message.Timestamp, message.PlayerSlot);
     }
 }
 
@@ -121,10 +334,10 @@ internal static class GoldSyncHandler
     internal static void Handle(SoulLinkGoldSyncMessage message, ulong senderId)
     {
         if (!SoulLinkSession.IsActive) return;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+        if (goldMode == GoldSharingMode.Default) return;
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null) return;
-
-        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
 
         // In SharedPool mode the remote player's setter may have already applied this
         // delta deterministically (e.g. monster gold-steal fires on both machines).
@@ -141,7 +354,7 @@ internal static class GoldSyncHandler
         if (goldMode == GoldSharingMode.SharedPool && message.Delta != 0)
         {
             GoldSyncPatch.EnqueueNetworkApplied(message.PlayerSlot);
-            GD.Print($"[SoulLink][GoldSync] EnqueueNetworkApplied slot={message.PlayerSlot} delta={message.Delta}");
+            SoulLinkLog.Debug($"[GoldSync] EnqueueNetworkApplied slot={message.PlayerSlot} delta={message.Delta}");
         }
 
         SoulLinkMod.ApplyingCanonical = true;
@@ -215,7 +428,7 @@ public static class RunLaunchPatch
         var runState = RunManager.Instance?.DebugOnlyGetState();
         if (runState == null) return;
 
-        GD.Print($"[SoulLink] Run launched with {runState.Players.Count} player(s).");
+        SoulLinkLog.Debug($"Run launched with {runState.Players.Count} player(s).");
 
         // Register handlers BEFORE OnRunStart so that if the host's SoulLinkSettingsSyncMessage
         // arrives before our own Launch() postfix completes, it lands in PendingSyncedRunSettings
@@ -223,6 +436,9 @@ public static class RunLaunchPatch
         if (runState.Players.Count > 1)
         {
             RunManager.Instance!.NetService.RegisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            GoldChangeActionHandler.TryRegister();
+            HpChangeActionHandler.TryRegister();
+            MaxHpChangeActionHandler.TryRegister();
             SettingsSyncHandler.TryRegister(); // safe even if lobby already registered it
         }
 
@@ -232,16 +448,19 @@ public static class RunLaunchPatch
         {
             // Solo run — unregister what we just registered.
             RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+            GoldChangeActionHandler.TryUnregister();
+            HpChangeActionHandler.TryUnregister();
+            MaxHpChangeActionHandler.TryUnregister();
             SettingsSyncHandler.TryUnregister();
-            GD.Print("[SoulLink] Solo run — session inactive.");
+            SoulLinkLog.Debug("Solo run — session inactive.");
             return;
         }
 
-        GD.Print($"[SoulLink] Soul Link active. Shared HP: {SoulLinkSession.CurrentHp}/{SoulLinkSession.MaxHp}, GoldMode: {SoulLinkSession.ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"Soul Link active. Shared HP: {SoulLinkSession.CurrentHp}/{SoulLinkSession.MaxHp}, GoldMode: {SoulLinkSession.ActiveRunSettings.GoldMode}");
 
         // Only the host broadcasts settings. The host is the machine whose local player is slot 0.
         bool isHost = LocalContext.IsMe(runState.Players[0]);
-        GD.Print($"[SoulLink] IsHost={isHost} — SplitMaxHp={SoulLinkSession.ActiveRunSettings.SplitMaxHp}, GoldMode={SoulLinkSession.ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"IsHost={isHost} — SplitMaxHp={SoulLinkSession.ActiveRunSettings.SplitMaxHp}, GoldMode={SoulLinkSession.ActiveRunSettings.GoldMode}");
 
         if (isHost)
         {
@@ -252,6 +471,7 @@ public static class RunLaunchPatch
                 SplitHeal    = rs.SplitHeal,
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
+                HpMode       = (int)rs.HpMode,
             });
         }
 
@@ -274,11 +494,15 @@ public static class RunCleanUpPatch
     static void Postfix()
     {
         if (!SoulLinkSession.IsActive) return;
-        GD.Print("[SoulLink] Run ended. Clearing session.");
+        SoulLinkLog.Debug("Run ended. Clearing session.");
 
         RunManager.Instance?.NetService?.UnregisterMessageHandler<SoulLinkGoldSyncMessage>(GoldSyncHandler.Handle);
+        GoldChangeActionHandler.TryUnregister();
+        HpChangeActionHandler.TryUnregister();
+        MaxHpChangeActionHandler.TryUnregister();
         SettingsSyncHandler.TryUnregister();
         GoldSyncPatch.ClearCancellations();
+        NetActionService.Reset();
 
         SoulLinkSession.OnRunEnd();
     }

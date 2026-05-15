@@ -1,0 +1,349 @@
+# INetAction System and Feature Flags
+
+This document describes the INetAction contract system and feature flag infrastructure.
+
+## Overview
+
+### INetAction
+
+`INetAction` is a contract for networked game actions that need deterministic synchronization across all multiplayer clients. It provides a structured alternative to direct Harmony patching with custom messages.
+
+**Key differences from INetMessage:**
+- **INetAction**: Represents state-changing operations (gain gold, heal, take damage)
+- **INetMessage**: Represents notifications or data transfers (sync settings, update UI)
+
+### Feature Flags
+
+The feature flag system (`FeatureFlagManager`) allows runtime enabling/disabling of mod features with three scopes:
+- **Global**: Persisted across runs and sessions
+- **Run**: Active for the current run only
+- **Session**: Active for the current play session only
+
+## Naming Clarity: Two Different INetAction Types
+
+**IMPORTANT**: There are two distinct types both named "INetAction" in STS2 modding:
+
+### 1. Vanilla Game INetAction (GameAction Network Representation)
+
+**Location**: `MegaCrit.Sts2.Core.GameActions` namespace  
+**Purpose**: Network serialization format paired with vanilla `GameAction` types  
+**Usage**: `GameAction.ToNetAction()` and `GameAction.ToGameAction()`  
+**Registration**: Automatic via GameAction queue integration  
+**Lifecycle**: Part of vanilla action queue execution  
+
+This is STS2's built-in multiplayer synchronization mechanism. When a `GameAction` needs to replicate across peers, it converts to an INetAction for network transport, then back to a `GameAction` on the receiving end.
+
+**Example vanilla types**: `CardPlayedGameAction`, `GoldLostGameAction`, `DamageReceivedGameAction`
+
+### 2. Mod INetAction (Soul Link MNA Contract)
+
+**Location**: `SoulLinkMod` namespace (defined in `Networking/MNA/INetAction.cs`)  
+**Purpose**: Mod-local action contract for MNA (Mod Net Action) pipeline  
+**Usage**: `NetActionService.EnqueueLocalAction(action)`  
+**Registration**: Manual handler registration in NetActionService  
+**Lifecycle**: Separate from vanilla action queue (for now)  
+
+This is Soul Link's transitional synchronization mechanism. It provides action-based ordering guarantees without coupling to vanilla `GameAction`. **This will be deprecated** once we migrate to vanilla GameAction queue (VGQ architecture).
+
+**Example mod types**: `HpChangeAction`, `GoldChangeAction`, `MaxHpChangeAction`
+
+### Key Differences
+
+| Aspect | Vanilla INetAction | Mod INetAction |
+|--------|-------------------|----------------|
+| **Namespace** | `MegaCrit.Sts2.Core.GameActions` | `SoulLinkMod` |
+| **Paired with** | `GameAction` subclass | Standalone struct |
+| **Queue integration** | ✅ Vanilla action queue | ❌ Separate pipeline (MNA) |
+| **Auto-discovery** | ✅ Via GameAction registration | ❌ Manual handler setup |
+| **Serialization** | Via GameAction converter | Via `*SyncMessage` wrapper |
+| **Long-term status** | Target architecture (VGQ) | Transitional (to be removed) |
+
+### Why This Matters for LLMs and Developers
+
+When reading documentation or code:
+- **"INetAction"** without namespace qualifier is ambiguous
+- **"ToNetAction()"** refers to vanilla GameAction conversion (not mod type)
+- **"NetActionService"** handles mod INetAction (not vanilla)
+- **"Action queue"** usually means vanilla GameAction queue (not mod pipeline)
+
+Always check the namespace and context to determine which INetAction type is being discussed.
+
+## Migration Checklist: MNA → VGQ
+
+When converting a mod INetAction to vanilla GameAction queue:
+
+### 1. Design Phase
+- [ ] Identify which vanilla `GameAction` subclass pattern to follow
+- [ ] Determine if action needs custom `INetAction` or can reuse vanilla format
+- [ ] Check if action should run in combat queue vs meta queue
+- [ ] Verify action priority/ordering relative to vanilla actions
+
+### 2. Implementation Phase
+- [ ] Create custom `GameAction` subclass in appropriate namespace
+- [ ] Implement `Apply()` method with deterministic state changes
+- [ ] Implement `ToNetAction()` to serialize action for network transport
+- [ ] Implement static `ToGameAction(INetAction)` to deserialize from network
+- [ ] Ensure serialization includes all fields needed for deterministic execution
+- [ ] Add owner ID tracking if action is player-specific
+
+### 3. Integration Phase
+- [ ] Replace `NetActionService.EnqueueLocalAction()` calls with `QueueGameAction()`
+- [ ] Remove corresponding `*SyncMessage` type (no longer needed)
+- [ ] Remove handler registration from `NetActionService`
+- [ ] Update Harmony patches to queue GameAction instead of calling NetActionService
+- [ ] Verify feature flag checks still work in new location
+
+### 4. Testing Phase
+- [ ] Test in FastMP with 2+ clients
+- [ ] Verify action appears in vanilla action queue history
+- [ ] Confirm deterministic execution (same checksums across peers)
+- [ ] Test timing edge cases (combat start/end, run start, etc.)
+- [ ] Compare state with MNA implementation to verify equivalence
+- [ ] Check logs for serialization/deserialization errors
+
+### 5. Cleanup Phase
+- [ ] Remove old MNA action struct and message types
+- [ ] Update documentation to reference new GameAction location
+- [ ] Add migration note explaining why old code was replaced
+- [ ] Update feature flags (deprecate MNA-specific flags)
+
+### Common Pitfalls
+
+❌ **Using mod INetAction when vanilla INetAction intended**: Check namespace!  
+❌ **Forgetting owner ID**: Player-specific actions need owner tracking for proper queue behavior  
+❌ **Non-deterministic serialization**: Field order and optional values must match exactly  
+❌ **Assuming auto-registration**: Vanilla INetAction requires GameAction pairing, not standalone  
+❌ **Wrong queue**: Combat actions go in combat queue, meta actions (gold, heal) in meta queue
+
+## Implementation Status
+
+### Files
+
+1. **Networking/MNA/INetAction.cs** - Mod-local action contract and context interface
+2. **Networking/MNA/NetActionContext.cs** - Default implementation of action execution context
+3. **Networking/MNA/NetActionService.cs** - Service for sending/receiving mod actions
+4. **Networking/MNA/Messages/HpChangeSyncMessage.cs** - Concrete message type for HP sync
+5. **Networking/MNA/Messages/MaxHpChangeSyncMessage.cs** - Concrete message type for MaxHP sync
+6. **Networking/MNA/Messages/GoldChangeSyncMessage.cs** - Concrete message type for gold sync
+7. **FeatureFlags.cs** - Enum of available feature flags and scopes
+8. **FeatureFlagManager.cs** - Manager for checking and setting flags
+9. **Networking/MNA/Actions/GoldChangeAction.cs** - Gold sync via mod INetAction
+10. **Networking/MNA/Actions/HpChangeAction.cs** - HP sync via mod INetAction
+11. **Networking/MNA/Actions/MaxHpChangeAction.cs** - MaxHP sync via mod INetAction
+
+### Current State
+
+- ✅ INetAction contract defined
+- ✅ Feature flag system complete
+- ✅ NetActionService send/receive infrastructure
+- ✅ HP/MaxHP sync via INetAction
+- ✅ Gold sync via INetAction (when NetworkedActions enabled)
+- ⚠️ NetworkedActions flag defaults to `false` (legacy sync still active)
+
+## Using INetAction
+
+### Creating a New Action
+
+```csharp
+using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Multiplayer.Serialization;
+using MegaCrit.Sts2.Core.Multiplayer.Transport;
+
+namespace SoulLinkMod;
+
+public struct MyCustomAction : INetAction
+{
+    // Action data (must be serializable)
+    public int SomeValue;
+    public string SomeText;
+
+    // Network properties
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    // Serialization
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteInt(SomeValue);
+        writer.WriteString(SomeText);
+    }
+
+    public void Deserialize(PacketReader reader)
+    {
+        SomeValue = reader.ReadInt();
+        SomeText = reader.ReadString();
+    }
+
+    // Execution (called on all clients)
+    public void Execute(INetActionContext context)
+    {
+        // Check feature flags
+        if (!FeatureFlagManager.IsEnabled(FeatureFlag.SoulLinkEnabled))
+            return;
+
+        // Apply deterministic effects here
+        GD.Print($"[MyAction] Player {context.OriginatingPlayerSlot} " +
+                 $"executed with value={SomeValue}");
+
+        // Update game state...
+    }
+}
+```
+
+### Sending Actions
+
+```csharp
+NetActionService.EnqueueLocalAction(new MyCustomAction
+{
+    SomeValue = 42,
+    SomeText = "Hello"
+}, playerSlot);
+```
+
+## Action Execution Model
+
+### Serialized Execution (State Divergence Prevention)
+
+`NetActionService` prevents parallel state modification by queuing remote actions that arrive during local action execution:
+
+1. **Local action starts**: `_executingAction = true`
+2. **Remote message arrives**: Checked by `ExecuteRemoteAction()`
+   - If `_executingAction == false`: Execute immediately (current behavior)
+   - If `_executingAction == true`: Queue to `_pendingMessages`
+3. **Local action completes**: `_executingAction = false`, drain queue
+4. **Queue drains**: Queued remote actions execute in order
+
+**Why this matters:**
+- Prevents checksum divergence from mid-action state changes
+- Preserves message ordering relative to local action lifecycle
+- Ensures canonical state updates complete atomically
+
+**Log signature:**
+```
+[NetActionService] Queued HpChangeAction during action execution (queue size: 1)
+[NetActionService] Draining 1 queued messages
+```
+
+### Transient State Re-evaluation
+
+Actions carrying transient state flags (e.g., `InCombat`) re-evaluate on receive to avoid stale data:
+
+```csharp
+// HpChangeAction.Execute() - remote path
+bool actualInCombat = CombatManager.Instance?.IsInProgress ?? false;
+
+if (actualInCombat != InCombat)
+{
+    GD.Print($"InCombat flag mismatch: message={InCombat}, actual={actualInCombat}. Using actual.");
+}
+
+// Apply delta using CURRENT state, not stale message flag
+int canonical = SoulLinkSession.ApplyHpDelta(DeltaHp, actualInCombat, ...);
+```
+
+**Why this matters:**
+- Combat-end relics (Burning Blood) fire when `IsInProgress` may have already flipped
+- Network latency means message-time state ≠ receive-time state
+- Different scaling rules apply in/out of combat → divergence if flag is wrong
+
+**Common divergence scenario:**
+1. Combat ends, peer A's Burning Blood fires with `InCombat=false` (scales heal by 1/playerCount)
+2. Message sent with `InCombat=false`
+3. Peer B receives message while `IsInProgress=true` (hasn't transitioned yet)
+4. Without re-eval: peer B applies wrong scaling → state divergence
+
+## Using Feature Flags
+
+### Checking Flags
+
+```csharp
+if (FeatureFlagManager.IsEnabled(FeatureFlag.SharedHealthPool))
+{
+    // Apply shared HP logic
+}
+else
+{
+    // Use STS2 default behavior
+}
+```
+
+### Setting Flags
+
+```csharp
+// Enable a feature
+FeatureFlagManager.SetFlag(FeatureFlag.DebugOverlay, true);
+
+// Disable a feature
+FeatureFlagManager.SetFlag(FeatureFlag.VerboseNetworkLogging, false);
+```
+
+### Available Flags
+
+| Flag | Default | Scope | Description |
+|------|---------|-------|-------------|
+| `SoulLinkEnabled` | true | Global | Master enable/disable for all Soul Link features |
+| `SharedHealthPool` | true | Run | Shared HP pool mechanic |
+| `GoldSharing` | true | Run | Gold sharing mechanics |
+| `NetworkedActions` | **false** | Session | INetAction system (disabled by default for testing) |
+| `DebugOverlay` | true | Session | Debug UI panel |
+| `CombatLog` | true | Session | Combat log panel |
+| `RunStatsPanel` | true | Session | Run stats panel |
+| `VerboseNetworkLogging` | false | Session | Verbose network logs |
+
+## Migration Path
+
+The feature flag system allows gradual migration from legacy sync to INetAction-based sync:
+
+1. ~~**Phase 1**: Contracts defined, `NetworkedActions` = false, legacy sync active~~
+2. ~~**Phase 2**: Implement action send/receive infrastructure, test alongside legacy~~
+3. ~~**Phase 3**: Port existing features (gold, HP) to INetAction, feature-flagged~~
+4. **Phase 4** (next): Enable `NetworkedActions` by default, deprecate legacy patches
+5. **Phase 5**: Remove legacy sync code
+
+## Next Steps
+
+### Remaining Work
+
+- [ ] Console commands for toggling flags at runtime
+- [ ] Save/load global flags from mod settings
+- [ ] Broadcast run flags at run start
+- [ ] Sync flags when new player joins
+- [ ] Enable NetworkedActions by default after testing
+
+## Testing
+1. Build the mod: `dotnet build`
+2. Run FastMP with multiple clients
+3. Toggle `NetworkedActions` flag via console
+4. Verify deterministic behavior in both modes
+5. Compare state checksums across clients
+
+## Design Principles
+
+1. **Deterministic**: Same action inputs → same outputs on all clients
+2. **Idempotent**: Safe to execute multiple times (where possible)
+3. **Feature-gated**: Check flags before applying effects
+4. **Logged**: Include context for debugging desyncs
+5. **Serializable**: Use typed PacketWriter/Reader APIs
+6. **Ordered**: Execute in FIFO queue order for state consistency
+7. **Concrete messages**: Each action has a dedicated `*SyncMessage` type (no generic wrappers)
+8. **Serialized execution**: Remote actions queue during local action execution to prevent parallel state modification
+9. **Current state validation**: Actions re-evaluate transient flags (e.g., InCombat) on receive to avoid stale data causing divergence
+
+## Why Concrete Message Types
+
+STS2's `MessageTypes` system uses `ReflectionHelper.GetSubtypesInMods<INetMessage>()` to discover message types at startup. This reflection finds concrete types but NOT closed generic instantiations (e.g. `NetActionMessage<HpChangeAction>`).
+
+Using concrete message types like `HpChangeSyncMessage` instead of `NetActionMessage<T>`:
+- Auto-discovered by STS2's reflection scanner
+- Cleaner error messages (shows real type name)
+- Matches STS2 base game patterns (e.g. `GoldLostMessage`, `CardRemovedMessage`)
+- Easier to debug and test
+
+## References
+
+- **ADR 0001**: [Queue-First Synchronization Architecture](docs/adr/0001-queue-first-synchronization.md) - Architectural decision to use vanilla GameAction queue over dual pipeline
+- Existing network messages: `Networking/Session/SoulLinkSettingsSyncMessage.cs`, `Networking/Wire/SoulLinkGoldSyncMessage.cs`
+- Existing sync patches: `Patches/GoldSyncPatch.cs`, `Patches/HpSyncPatch.cs`
+- MNA infrastructure: `Networking/MNA/` - Transitional action-based synchronization (to be replaced by VGQ)
+- STS2 multiplayer docs: See CLAUDE.md "Slay the Spire 2 Multiplayer" section
