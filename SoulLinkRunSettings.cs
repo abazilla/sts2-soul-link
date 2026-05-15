@@ -42,7 +42,7 @@ public struct SoulLinkRunSettings
         SplitMaxHp   = true,
         SplitHeal    = true,
         GoldMode     = GoldSharingMode.Default,
-        SharedLoseHp = false,
+        SharedLoseHp = true,
         HpMode       = HpMode.SharedPool,
     };
 }

@@ -205,10 +205,10 @@ public class CombatLogPanel : Control
         Color baseColor = player.Character.MapDrawingColor;
         Color shaded = slot switch
         {
-            0 => baseColor,
-            1 => baseColor.Lightened(0.25f),
-            2 => baseColor.Darkened(0.25f),
-            _ => baseColor.Lightened(0.45f),
+            0 => baseColor.Lightened(0.35f),
+            1 => baseColor.Lightened(0.55f),
+            2 => baseColor.Lightened(0.15f),
+            _ => baseColor.Lightened(0.7f),
         };
         return shaded.ToHtml(false);
     }

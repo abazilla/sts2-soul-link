@@ -119,7 +119,7 @@ public class DebugOverlay : Control
         content.AddChild(IndentLabel(_splitHealLbl,  20));
         content.AddChild(MakeSpacer(2));
         content.AddChild(_goldModeLbl);
-        content.AddChild(_sessionGoldLbl);
+        content.AddChild(IndentLabel(_sessionGoldLbl, 20));
     }
 
     private static Control MakeSpacer(int height)
@@ -192,7 +192,7 @@ public class DebugOverlay : Control
             Set(_sessionHpLbl, $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
 
         bool showSessionGold = rs.GoldMode != GoldSharingMode.Default;
-        if (_sessionGoldLbl != null) _sessionGoldLbl.Visible = showSessionGold;
+        if (_sessionGoldLbl?.GetParent() is Control sessGoldWrap) sessGoldWrap.Visible = showSessionGold;
         if (showSessionGold)
         {
             string goldLine = rs.GoldMode switch
