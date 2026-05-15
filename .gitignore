@@ -3,6 +3,7 @@ obj/
 .agents/
 issues/
 node_modules/
+docs/
 .claude/
 .cursor/
 scripts/
