@@ -33,8 +33,8 @@ public class SoulLinkSettings
 
     // ── Run settings (host-owned, broadcast to clients at run start) ──────────
 
-    public bool SplitMaxHp   { get; set; } = true;
-    public bool SplitHeal    { get; set; } = true;
+    public bool SplitMaxHp   { get; set; } = false;
+    public bool SplitHeal    { get; set; } = false;
     public GoldSharingMode GoldMode { get; set; } = GoldSharingMode.Default;
     /// <summary>
     /// When true, "lose HP" relics and cards (CentennialPuzzle, SelfFormingClay,

@@ -1,5 +1,6 @@
 bin/
 obj/
+dist/
 .agents/
 issues/
 node_modules/
