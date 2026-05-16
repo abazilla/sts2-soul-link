@@ -4,11 +4,11 @@ using System.Linq;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.HoverTips;
-using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Relics;
+using SoulLinkMod.Localization;
 using MethodType = HarmonyLib.MethodType;
 
 namespace SoulLinkMod.Patches;
@@ -23,22 +23,21 @@ namespace SoulLinkMod.Patches;
 /// </summary>
 public static class SoulLinkHoverTipPatch
 {
-    private static readonly LocString _titleStr =
-        new LocString("gameplay_ui", "soullink.tip.title");
-
-    private static readonly Dictionary<Type, string> _relicDescriptions = new()
+    // Maps game type -> loc key under the "tip." namespace. Strings live in
+    // Localization/locales/*.json so they translate alongside the rest of the UI.
+    private static readonly Dictionary<Type, string> _relicKeys = new()
     {
-        [typeof(CentennialPuzzle)] = "Also triggers when your teammate takes unblocked damage.",
-        [typeof(SelfFormingClay)]  = "Also triggers when your teammate takes unblocked damage.",
-        [typeof(DemonTongue)]      = "Also heals when your teammate takes unblocked damage during your turn.",
-        [typeof(LizardTail)]       = "Also prevents your teammate from dying.",
-        [typeof(EmotionChip)]      = "Also triggered by damage your teammate received last turn.",
+        [typeof(CentennialPuzzle)] = "tip.centennial_puzzle",
+        [typeof(SelfFormingClay)]  = "tip.self_forming_clay",
+        [typeof(DemonTongue)]      = "tip.demon_tongue",
+        [typeof(LizardTail)]       = "tip.lizard_tail",
+        [typeof(EmotionChip)]      = "tip.emotion_chip",
     };
 
-    private static readonly Dictionary<Type, string> _cardDescriptions = new()
+    private static readonly Dictionary<Type, string> _cardKeys = new()
     {
-        [typeof(Spite)]       = "Also triggered by damage your teammate receives.",
-        [typeof(TearAsunder)] = "Also triggered by damage your teammate receives.",
+        [typeof(Spite)]       = "tip.spite",
+        [typeof(TearAsunder)] = "tip.tear_asunder",
     };
 
     /// <summary>
@@ -55,8 +54,8 @@ public static class SoulLinkHoverTipPatch
     static void RelicPostfix(RelicModel __instance, ref IEnumerable<IHoverTip> __result)
     {
         if (!SharedLoseHpEnabled) return;
-        if (!_relicDescriptions.TryGetValue(__instance.GetType(), out var desc)) return;
-        __result = __result.Append(new HoverTip(_titleStr, desc));
+        if (!_relicKeys.TryGetValue(__instance.GetType(), out var key)) return;
+        __result = __result.Append(new HoverTip(Loc.S("tip.title"), Loc.T(key)));
     }
 
     [HarmonyPostfix]
@@ -64,8 +63,8 @@ public static class SoulLinkHoverTipPatch
     static void CardPostfix(CardModel __instance, ref IEnumerable<IHoverTip> __result)
     {
         if (!SharedLoseHpEnabled) return;
-        if (!_cardDescriptions.TryGetValue(__instance.GetType(), out var desc)) return;
-        __result = __result.Append(new HoverTip(_titleStr, desc));
+        if (!_cardKeys.TryGetValue(__instance.GetType(), out var key)) return;
+        __result = __result.Append(new HoverTip(Loc.S("tip.title"), Loc.T(key)));
     }
 
     [HarmonyPostfix]
@@ -74,6 +73,6 @@ public static class SoulLinkHoverTipPatch
     {
         if (!SharedLoseHpEnabled) return;
         if (__instance is not FairyInABottle) return;
-        __result = __result.Append(new HoverTip(_titleStr, "Also saves your teammate from dying."));
+        __result = __result.Append(new HoverTip(Loc.S("tip.title"), Loc.T("tip.fairy_in_a_bottle")));
     }
 }

@@ -17,6 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Ship locale JSON next to the DLL. LocTableLoader reads these via Assembly.Location. -->
+    <Content Include="Localization\locales\*.json">
+      <Link>locales\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="sts2">
       <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\sts2.dll</HintPath>
       <Private>false</Private>

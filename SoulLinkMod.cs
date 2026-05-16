@@ -1,13 +1,12 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Godot;
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Modding;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod;
 
@@ -100,18 +99,11 @@ public static class SoulLinkMod
 
             SoulLinkLog.Info($"Initialized v{Version}.");
 
-            try
-            {
-                LocManager.Instance.GetTable("gameplay_ui")
-                    .MergeWith(new Dictionary<string, string>
-                    {
-                        ["soullink.tip.title"] = "⊞ Soul Link"
-                    });
-            }
-            catch (Exception ex)
-            {
-                SoulLinkLog.Error($"Localization inject failed: {ex}");
-            }
+            // Localization tables load lazily on first Loc.T/Loc.S call — see
+            // Localization/LocTableLoader.cs. Eager merge here would NRE because
+            // LocManager.Instance is null this early in the boot sequence
+            // (bd: sts2-soul-link-q60). EnsureLoaded retries until LocManager exists.
+            LocTableLoader.EnsureLoaded();
         }
         catch (Exception ex)
         {

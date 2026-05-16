@@ -1,30 +1,37 @@
 using Godot;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod.UI;
 
-/// <summary>Lazy-loads Kreon Bold once and provides helpers to apply it to UI controls.</summary>
+/// <summary>
+/// Lazy-loads the Soul Link UI font (Kreon Bold with a CJK fallback chain — see
+/// <see cref="LocFontResolver"/>) and applies it to UI controls.
+/// </summary>
 internal static class SoulLinkFont
 {
-    private static Font? _kreon;
-    private static Font? Kreon => _kreon ??= ResourceLoader.Load<Font>("res://fonts/kreon_bold.ttf");
+    private static Font? Font => LocFontResolver.Resolve();
 
     internal static void Apply(Label lbl)
     {
-        if (Kreon != null) lbl.AddThemeFontOverride("font", Kreon);
+        var f = Font;
+        if (f != null) lbl.AddThemeFontOverride("font", f);
     }
 
     internal static void Apply(Button btn)
     {
-        if (Kreon != null) btn.AddThemeFontOverride("font", Kreon);
+        var f = Font;
+        if (f != null) btn.AddThemeFontOverride("font", f);
     }
 
     internal static void Apply(RichTextLabel rtl)
     {
-        if (Kreon != null) rtl.AddThemeFontOverride("normal_font", Kreon);
+        var f = Font;
+        if (f != null) rtl.AddThemeFontOverride("normal_font", f);
     }
 
     internal static void Apply(PopupMenu popup)
     {
-        if (Kreon != null) popup.AddThemeFontOverride("font", Kreon);
+        var f = Font;
+        if (f != null) popup.AddThemeFontOverride("font", f);
     }
 }
