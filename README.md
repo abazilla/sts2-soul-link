@@ -1,6 +1,6 @@
 # Soul Link
 
-Soul Link is a multiplayer Slay the Spire 2 co-op mod where all players share HP and Gold. Inspired by the various Soul Link mods.
+Soul Link is a multiplayer Slay the Spire 2 co-op mod where all players share HP and Gold. Inspired by the various Soul Link mods. [Nexus Mods link](https://www.nexusmods.com/slaythespire2/mods/907)
 
 https://github.com/user-attachments/assets/2958dcbe-a784-4a89-a63a-d1345021a4d7
 
