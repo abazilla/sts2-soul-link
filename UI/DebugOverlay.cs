@@ -200,15 +200,52 @@ public class DebugOverlay : Control
             Set(_sessionGoldLbl, goldLine, ColorGold);
         }
 
-        string hpModeName = rs.HpMode == HpMode.Vanilla ? Loc.T("debug.hp_mode_default") : rs.HpMode.ToString();
+        string hpModeName   = FormatHpModeName(rs.HpMode);
+        string goldModeName = FormatGoldModeName(rs.GoldMode);
         Set(_hpModeLbl,     Loc.Tf("debug.hp_mode", hpModeName), ColorBody);
-        Set(_goldModeLbl,   Loc.Tf("debug.gold_mode", rs.GoldMode), ColorBody);
+        Set(_goldModeLbl,   Loc.Tf("debug.gold_mode", goldModeName), ColorBody);
 
         if (_bgPanel != null)
             _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
             _toggleButton.Text = Loc.Tf(_expanded ? "debug.header_expanded" : "debug.header_collapsed", SoulLinkMod.Version);
+    }
+
+    private static string FormatHpModeName(HpMode mode)
+    {
+        string english = mode.ToString();
+        if (string.Equals(Loc.CurrentLocale, Loc.FallbackLocale, System.StringComparison.OrdinalIgnoreCase))
+            return english;
+        string key = mode switch
+        {
+            HpMode.SharedPool             => "settings.hp_mode.shared_pool",
+            HpMode.Vanilla                => "settings.hp_mode.vanilla",
+            HpMode.SharedBlockSharedPool  => "settings.hp_mode.shared_block_shared_pool",
+            _                             => "",
+        };
+        if (string.IsNullOrEmpty(key)) return english;
+        string localized = Loc.T(key);
+        if (string.IsNullOrEmpty(localized) || localized == key) return english;
+        return $"{english} ({localized})";
+    }
+
+    private static string FormatGoldModeName(GoldSharingMode mode)
+    {
+        string english = mode.ToString();
+        if (string.Equals(Loc.CurrentLocale, Loc.FallbackLocale, System.StringComparison.OrdinalIgnoreCase))
+            return english;
+        string key = mode switch
+        {
+            GoldSharingMode.Default       => "settings.gold_mode.vanilla",
+            GoldSharingMode.SharedPool    => "settings.gold_mode.shared_pool",
+            GoldSharingMode.SplitByPlayer => "settings.gold_mode.split",
+            _                             => "",
+        };
+        if (string.IsNullOrEmpty(key)) return english;
+        string localized = Loc.T(key);
+        if (string.IsNullOrEmpty(localized) || localized == key) return english;
+        return $"{english} ({localized})";
     }
 
     private static void Set(Label? lbl, string text, Color color)

@@ -3,6 +3,7 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Runs;
+using SoulLinkMod.Patches;
 using SoulLinkMod.UI;
 
 using SoulLinkMod;
@@ -78,9 +79,20 @@ public struct HpChangeAction : INetAction
 
         int playerCount = runState.Players.Count;
 
+        // Prefer locally-resolved attacker name (in receiver's locale) over the
+        // string baked on the sender's machine. Combat state is mirrored across
+        // peers; the same monster is mid-move locally, so enemy.Name resolves
+        // in this client's language. Falls back to the broadcast string.
+        string? localizedSource = Source;
+        if (InCombat)
+        {
+            string? local = HpSyncPatch.ResolveActiveAttacker(runState.Players[PlayerSlot].Creature, InCombat);
+            if (!string.IsNullOrEmpty(local)) localizedSource = local;
+        }
+
         // Atomically check-apply-mark via SyncCoordinator (thread-safe dedup).
         // Returns null if the local deterministic patch already applied this change.
-        int? result = SyncCoordinator.TryApplyHpDelta(PlayerSlot, DeltaHp, isFromNetwork: true, InCombat, playerCount, Source);
+        int? result = SyncCoordinator.TryApplyHpDelta(PlayerSlot, DeltaHp, isFromNetwork: true, InCombat, playerCount, localizedSource);
         if (result == null)
         {
             SoulLinkLog.Debug($"[HpChangeAction] Skipping: already applied by local deterministic event");

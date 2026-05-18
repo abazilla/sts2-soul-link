@@ -65,7 +65,43 @@
   "feed": {
     "header_expanded": "Soul Link Feed v",
     "header_collapsed": "Soul Link Feed >",
-    "no_events": "(no events yet)"
+    "no_events": "(no events yet)",
+
+    "unit": {
+      "damage": "damage",
+      "health": "health",
+      "hp":     "HP",
+      "max_hp": "max HP",
+      "gold":   "gold"
+    },
+    "source": {
+      "event":          "Event",
+      "rest_site":      "Rest Site",
+      "shop":           "Shop",
+      "treasure":       "Treasure",
+      "combat":         "Combat",
+      "out_of_combat":  "Out of combat"
+    },
+    "health": {
+      "damage":            "{0} took {1}",
+      "damage_from":       "{0} took {1} from {2}",
+      "heal":              "{0} healed {1}",
+      "heal_via":          "{0} healed {1} via {2}",
+      "heal_and_max":      "{0} healed {1} and gained {2}",
+      "heal_and_max_via":  "{0} healed {1} and gained {2} via {3}",
+      "max_gain":          "{0} gained {1}",
+      "max_gain_via":      "{0} gained {1} via {2}",
+      "max_loss":          "{0} lost {1}",
+      "max_loss_via":      "{0} lost {1} via {2}"
+    },
+    "gold": {
+      "gain":           "{0} gained {1}",
+      "gain_from":      "{0} gained {1} from {2}",
+      "spend":          "{0} spent {1}",
+      "spend_via":      "{0} spent {1} via {2}",
+      "blocked":        "{0} couldn't gain {1} ({2})",
+      "default_source": "Relic"
+    }
   },
 
   "debug": {

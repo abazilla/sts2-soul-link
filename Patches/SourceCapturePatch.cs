@@ -34,29 +34,27 @@ static class EventRoomSourcePatch
             // We convert to title case: "MYSTERIOUS_ORB" → "Mysterious Orb".
             var eventField = AccessTools.Field(__instance.GetType(), "_event");
             var eventModel = eventField?.GetValue(__instance);
-            string? name = null;
+            string? entry = null;
             if (eventModel != null)
             {
-                // Id may be on the type or a base type
                 var idProp = AccessTools.Property(eventModel.GetType(), "Id")
                     ?? AccessTools.Property(eventModel.GetType().BaseType, "Id");
                 var idObj = idProp?.GetValue(eventModel);
                 if (idObj != null)
                 {
                     var entryProp = AccessTools.Property(idObj.GetType(), "Entry");
-                    string? entry = entryProp?.GetValue(idObj)?.ToString();
-                    if (!string.IsNullOrEmpty(entry))
-                    {
-                        name = System.Globalization.CultureInfo.CurrentCulture.TextInfo
-                            .ToTitleCase(entry.Replace("_", " ").ToLower());
-                    }
+                    entry = entryProp?.GetValue(idObj)?.ToString();
                 }
             }
-            SoulLinkSession.CurrentRoomSource = !string.IsNullOrWhiteSpace(name) ? name : "Event";
+            // Store as marker; resolved at render time using the viewer's locale via
+            // the vanilla "events" loc table (key: "<ENTRY>.title").
+            SoulLinkSession.CurrentRoomSource = !string.IsNullOrWhiteSpace(entry)
+                ? $"@event:{entry}"
+                : "@source:event";
         }
         catch
         {
-            SoulLinkSession.CurrentRoomSource = "Event";
+            SoulLinkSession.CurrentRoomSource = "@source:event";
         }
     }
 }
@@ -76,7 +74,7 @@ static class RestSiteSourcePatch
     static void Postfix()
     {
         if (!SoulLinkSession.IsActive) return;
-        SoulLinkSession.CurrentRoomSource = "Rest Site";
+        SoulLinkSession.CurrentRoomSource = "@source:rest_site";
     }
 }
 
@@ -95,7 +93,7 @@ static class MerchantSourcePatch
     static void Postfix()
     {
         if (!SoulLinkSession.IsActive) return;
-        SoulLinkSession.CurrentRoomSource = "Shop";
+        SoulLinkSession.CurrentRoomSource = "@source:shop";
     }
 }
 
@@ -114,7 +112,7 @@ static class TreasureSourcePatch
     static void Postfix()
     {
         if (!SoulLinkSession.IsActive) return;
-        SoulLinkSession.CurrentRoomSource = "Treasure";
+        SoulLinkSession.CurrentRoomSource = "@source:treasure";
     }
 }
 

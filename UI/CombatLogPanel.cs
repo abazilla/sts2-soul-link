@@ -41,6 +41,7 @@ public class CombatLogPanel : Control
     private const string HexGoldSpend = "ffa600";
     private const string HexBlocked   = "808080";
     private const string HexSource    = "ffffff";
+    private const string HexEvent     = "9bd1ff";
     private const string HexHeader    = "999999";
     private static readonly Color ColorAccentYellow = new Color("efc851");
 
@@ -232,70 +233,118 @@ public class CombatLogPanel : Control
         return shaded.ToHtml(false);
     }
 
+    // Compose a colored amount like "9 damage" / "11 max HP" / "50 gold".
+    // Unit noun is locale-specific; full phrase shares one color so the entire
+    // amount (number + noun) tints together in the feed.
+    private static string Amt(int n, string unitKey) => $"{n} {Loc.T($"feed.unit.{unitKey}")}";
+
     private static List<(string, string)> FormatHealth(string name, string nameHex, LogEntry e)
     {
-        var segs = new List<(string, string)> { ($"{name} ", nameHex) };
-
         int d = e.Delta, md = e.MaxHpDelta;
+        bool hasSrc = !string.IsNullOrEmpty(e.Source);
+        string src = ResolveSource(e.Source);
 
         if (d < 0)
-        {
-            segs.Add(($"took {-d} damage", HexDamage));
-            AppendSource(segs, "from", e.Source);
-        }
-        else if (d > 0 && md > 0)
-        {
-            segs.Add(($"healed {d} HP and gained {md} max HP", HexHeal));
-            AppendSource(segs, "via", e.Source);
-        }
-        else if (d > 0)
-        {
-            segs.Add(($"healed {d} health", HexHeal));
-            AppendSource(segs, "via", e.Source);
-        }
-        else if (md > 0)
-        {
-            segs.Add(($"gained {md} max HP", HexHeal));
-            AppendSource(segs, "via", e.Source);
-        }
-        else if (md < 0)
-        {
-            segs.Add(($"lost {-md} max HP", HexDamage));
-            AppendSource(segs, "via", e.Source);
-        }
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.health.damage_from") : Loc.T("feed.health.damage"),
+                (name, nameHex), (Amt(-d, "damage"), HexDamage), (src, HexEvent));
+        if (d > 0 && md > 0)
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.health.heal_and_max_via") : Loc.T("feed.health.heal_and_max"),
+                (name, nameHex), (Amt(d, "hp"), HexHeal), (Amt(md, "max_hp"), HexHeal), (src, HexEvent));
+        if (d > 0)
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.health.heal_via") : Loc.T("feed.health.heal"),
+                (name, nameHex), (Amt(d, "health"), HexHeal), (src, HexEvent));
+        if (md > 0)
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.health.max_gain_via") : Loc.T("feed.health.max_gain"),
+                (name, nameHex), (Amt(md, "max_hp"), HexHeal), (src, HexEvent));
+        if (md < 0)
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.health.max_loss_via") : Loc.T("feed.health.max_loss"),
+                (name, nameHex), (Amt(-md, "max_hp"), HexDamage), (src, HexEvent));
 
-        return segs;
+        return new List<(string, string)> { (name, nameHex) };
     }
 
     private static List<(string, string)> FormatGold(string name, string nameHex, LogEntry e)
     {
-        var segs = new List<(string, string)> { ($"{name} ", nameHex) };
+        bool hasSrc = !string.IsNullOrEmpty(e.Source);
+        string src = hasSrc ? ResolveSource(e.Source) : Loc.T("feed.gold.default_source");
 
         if (e.Blocked)
-        {
-            segs.Add(($"couldn't gain {e.Delta} gold ({e.Source ?? "Relic"})", HexBlocked));
-        }
-        else if (e.Delta > 0)
-        {
-            segs.Add(($"gained {e.Delta} gold", HexGoldGain));
-            AppendSource(segs, "from", e.Source);
-        }
-        else
-        {
-            segs.Add(($"spent {-e.Delta} gold", HexGoldSpend));
-            AppendSource(segs, "via", e.Source);
-        }
-
-        return segs;
+            return RenderTemplate(Loc.T("feed.gold.blocked"),
+                (name, nameHex), (Amt(e.Delta, "gold"), HexBlocked), (src, HexBlocked));
+        if (e.Delta > 0)
+            return RenderTemplate(
+                hasSrc ? Loc.T("feed.gold.gain_from") : Loc.T("feed.gold.gain"),
+                (name, nameHex), (Amt(e.Delta, "gold"), HexGoldGain), (src, HexEvent));
+        return RenderTemplate(
+            hasSrc ? Loc.T("feed.gold.spend_via") : Loc.T("feed.gold.spend"),
+            (name, nameHex), (Amt(-e.Delta, "gold"), HexGoldSpend), (src, HexEvent));
     }
 
-    private static void AppendSource(List<(string, string)> segs, string prep, string? source)
+    // Source strings may be raw text (attacker name, free string) or a marker:
+    //   "@source:<key>"   → resolved via Loc.T("feed.source.<key>")
+    //   "@event:<ID>"     → resolved via vanilla "events" loc table at "<ID>.title"
+    // Markers defer locale resolution until render so each viewer sees event/room
+    // names in their own language.
+    private static string ResolveSource(string? raw)
     {
-        if (!string.IsNullOrEmpty(source))
+        if (string.IsNullOrEmpty(raw)) return "";
+        if (raw.StartsWith("@source:", StringComparison.Ordinal))
         {
-            segs.Add(($" {prep} ", HexSource));
-            segs.Add((source, HexSource));
+            string key = "feed.source." + raw.Substring("@source:".Length);
+            string t = Loc.T(key);
+            return string.IsNullOrEmpty(t) || t == key ? raw : t;
         }
+        if (raw.StartsWith("@event:", StringComparison.Ordinal))
+            return LookupVanilla("events", raw.Substring("@event:".Length) + ".title", raw.Substring("@event:".Length));
+        if (raw.StartsWith("@relic:", StringComparison.Ordinal))
+            return LookupVanilla("relics", raw.Substring("@relic:".Length) + ".title", raw.Substring("@relic:".Length));
+        return raw;
+    }
+
+    private static string LookupVanilla(string table, string key, string fallbackEntry)
+    {
+        try
+        {
+            var ls = new MegaCrit.Sts2.Core.Localization.LocString(table, key);
+            string s = ls.GetFormattedText();
+            if (!string.IsNullOrEmpty(s)) return s;
+        }
+        catch { }
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo
+            .ToTitleCase(fallbackEntry.Replace("_", " ").ToLower());
+    }
+
+    // Expand "{0} took {1} damage from {2}" into colored segments.
+    // Plain text between placeholders gets the body/source neutral color.
+    private static List<(string, string)> RenderTemplate(string template, params (string text, string hex)[] tokens)
+    {
+        var segs = new List<(string, string)>();
+        int i = 0, n = template.Length;
+        var lit = new StringBuilder();
+        while (i < n)
+        {
+            char c = template[i];
+            if (c == '{' && i + 1 < n && char.IsDigit(template[i + 1]))
+            {
+                int end = template.IndexOf('}', i + 1);
+                if (end > i && int.TryParse(template.Substring(i + 1, end - i - 1), out int idx) && idx >= 0 && idx < tokens.Length)
+                {
+                    if (lit.Length > 0) { segs.Add((lit.ToString(), HexSource)); lit.Clear(); }
+                    segs.Add(tokens[idx]);
+                    i = end + 1;
+                    continue;
+                }
+            }
+            lit.Append(c);
+            i++;
+        }
+        if (lit.Length > 0) segs.Add((lit.ToString(), HexSource));
+        return segs;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

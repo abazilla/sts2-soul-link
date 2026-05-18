@@ -65,7 +65,43 @@
   "feed": {
     "header_expanded": "灵魂链接战报 v",
     "header_collapsed": "灵魂链接战报 >",
-    "no_events": "（暂无事件）"
+    "no_events": "（暂无事件）",
+
+    "unit": {
+      "damage": "点伤害",
+      "health": "点生命",
+      "hp":     "点生命",
+      "max_hp": "点最大生命",
+      "gold":   "金币"
+    },
+    "source": {
+      "event":          "事件",
+      "rest_site":      "休息处",
+      "shop":           "商店",
+      "treasure":       "宝藏",
+      "combat":         "战斗",
+      "out_of_combat":  "战斗外"
+    },
+    "health": {
+      "damage":            "{0} 受到 {1}",
+      "damage_from":       "{0} 受到 {2} 造成的 {1}",
+      "heal":              "{0} 回复了 {1}",
+      "heal_via":          "{0} 通过 {2} 回复了 {1}",
+      "heal_and_max":      "{0} 回复了 {1} 并获得了 {2}",
+      "heal_and_max_via":  "{0} 通过 {3} 回复了 {1} 并获得了 {2}",
+      "max_gain":          "{0} 获得了 {1}",
+      "max_gain_via":      "{0} 通过 {2} 获得了 {1}",
+      "max_loss":          "{0} 失去了 {1}",
+      "max_loss_via":      "{0} 通过 {2} 失去了 {1}"
+    },
+    "gold": {
+      "gain":           "{0} 获得了 {1}",
+      "gain_from":      "{0} 从 {2} 获得了 {1}",
+      "spend":          "{0} 花费了 {1}",
+      "spend_via":      "{0} 在 {2} 花费了 {1}",
+      "blocked":        "{0} 无法获得 {1}（{2}）",
+      "default_source": "遗物"
+    }
   },
 
   "debug": {

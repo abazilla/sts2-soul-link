@@ -259,7 +259,7 @@ public static class GoldSyncPatch
             : SoulLinkSession.Gold;
 
         int canonical = SoulLinkSession.ApplyGoldDelta(delta, playerCount, playerSlot, blocked,
-            blockSource: blocked ? "Ectoplasm" : null,
+            blockSource: blocked ? "@relic:Ectoplasm" : null,
             source: blocked ? null : source);
         int broadcastDelta = canonical - prevCanonical;
 

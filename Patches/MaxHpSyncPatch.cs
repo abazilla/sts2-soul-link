@@ -69,7 +69,7 @@ public static class MaxHpSyncPatch
 
         string? source = SoulLinkSession.PendingSource
             ?? SoulLinkSession.CurrentRoomSource
-            ?? (inCombat ? "Combat" : "Out of combat");
+            ?? (inCombat ? "@source:combat" : "@source:out_of_combat");
         SoulLinkSession.PendingSource = null;
 
         // VGQ path owns the apply on every peer via ExecuteAction. The patch only

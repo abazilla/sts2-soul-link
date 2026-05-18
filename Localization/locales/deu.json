@@ -65,7 +65,43 @@
   "feed": {
     "header_expanded": "Soul Link Feed v",
     "header_collapsed": "Soul Link Feed >",
-    "no_events": "(noch keine Ereignisse)"
+    "no_events": "(noch keine Ereignisse)",
+
+    "unit": {
+      "damage": "Schaden",
+      "health": "LP",
+      "hp":     "LP",
+      "max_hp": "Max-LP",
+      "gold":   "Gold"
+    },
+    "source": {
+      "event":          "Ereignis",
+      "rest_site":      "Rastplatz",
+      "shop":           "Händler",
+      "treasure":       "Schatz",
+      "combat":         "Kampf",
+      "out_of_combat":  "Außerhalb des Kampfes"
+    },
+    "health": {
+      "damage":            "{0} erlitt {1}",
+      "damage_from":       "{0} erlitt {1} von {2}",
+      "heal":              "{0} heilte {1}",
+      "heal_via":          "{0} heilte {1} durch {2}",
+      "heal_and_max":      "{0} heilte {1} und erhielt {2}",
+      "heal_and_max_via":  "{0} heilte {1} und erhielt {2} durch {3}",
+      "max_gain":          "{0} erhielt {1}",
+      "max_gain_via":      "{0} erhielt {1} durch {2}",
+      "max_loss":          "{0} verlor {1}",
+      "max_loss_via":      "{0} verlor {1} durch {2}"
+    },
+    "gold": {
+      "gain":           "{0} erhielt {1}",
+      "gain_from":      "{0} erhielt {1} von {2}",
+      "spend":          "{0} gab {1} aus",
+      "spend_via":      "{0} gab {1} aus für {2}",
+      "blocked":        "{0} konnte {1} nicht erhalten ({2})",
+      "default_source": "Relikt"
+    }
   },
 
   "debug": {

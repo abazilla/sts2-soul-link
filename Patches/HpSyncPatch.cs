@@ -71,7 +71,7 @@ public static class HpSyncPatch
             string? initSource = SoulLinkSession.PendingSource
                 ?? ResolveActiveAttacker(__instance, inCombat)
                 ?? SoulLinkSession.CurrentRoomSource
-                ?? "Out of combat";
+                ?? "@source:out_of_combat";
             SoulLinkSession.PendingSource = null;
             SoulLinkSession.OverwriteCanonicalHp(value, playerSlot, initSource);
             int canonical = SoulLinkSession.CurrentHp;
@@ -97,7 +97,7 @@ public static class HpSyncPatch
         string? source = SoulLinkSession.PendingSource
             ?? ResolveActiveAttacker(__instance, inCombat)
             ?? SoulLinkSession.CurrentRoomSource
-            ?? (inCombat ? "Combat" : "Out of combat");
+            ?? (inCombat ? "@source:combat" : "@source:out_of_combat");
         SoulLinkSession.PendingSource = null;
 
         // VGQ path owns the apply on every peer via ExecuteAction. Patch only
@@ -181,7 +181,7 @@ public static class HpSyncPatch
     // labelled with the actual attacker (e.g. "Byrdonis") instead of "Combat".
     // Relies on MonsterModel.IsPerformingMove being true for exactly the attacker
     // for the duration of its move; falls back to null if nothing matches.
-    private static string? ResolveActiveAttacker(Creature playerCreature, bool inCombat)
+    internal static string? ResolveActiveAttacker(Creature playerCreature, bool inCombat)
     {
         if (!inCombat) return null;
         var cs = playerCreature.CombatState;

@@ -65,7 +65,43 @@
   "feed": {
     "header_expanded": "Flux Soul Link v",
     "header_collapsed": "Flux Soul Link >",
-    "no_events": "(aucun événement)"
+    "no_events": "(aucun événement)",
+
+    "unit": {
+      "damage": "dégâts",
+      "health": "PV",
+      "hp":     "PV",
+      "max_hp": "PV max",
+      "gold":   "Or"
+    },
+    "source": {
+      "event":          "Événement",
+      "rest_site":      "Site de repos",
+      "shop":           "Boutique",
+      "treasure":       "Trésor",
+      "combat":         "Combat",
+      "out_of_combat":  "Hors combat"
+    },
+    "health": {
+      "damage":            "{0} a subi {1}",
+      "damage_from":       "{0} a subi {1} de {2}",
+      "heal":              "{0} a soigné {1}",
+      "heal_via":          "{0} a soigné {1} via {2}",
+      "heal_and_max":      "{0} a soigné {1} et gagné {2}",
+      "heal_and_max_via":  "{0} a soigné {1} et gagné {2} via {3}",
+      "max_gain":          "{0} a gagné {1}",
+      "max_gain_via":      "{0} a gagné {1} via {2}",
+      "max_loss":          "{0} a perdu {1}",
+      "max_loss_via":      "{0} a perdu {1} via {2}"
+    },
+    "gold": {
+      "gain":           "{0} a gagné {1}",
+      "gain_from":      "{0} a gagné {1} de {2}",
+      "spend":          "{0} a dépensé {1}",
+      "spend_via":      "{0} a dépensé {1} via {2}",
+      "blocked":        "{0} n'a pas pu gagner {1} ({2})",
+      "default_source": "Relique"
+    }
   },
 
   "debug": {

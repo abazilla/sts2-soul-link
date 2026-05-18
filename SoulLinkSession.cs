@@ -134,6 +134,27 @@ public static class SoulLinkSession
                     ? (int)Math.Min(sum, int.MaxValue)
                     : (int)Math.Round(sum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
                 CurrentHp = Math.Min(finalHp, MaxHp);
+
+                // Push pool MaxHp + CurrentHp to all creatures now that ascension-scaled
+                // per-slot writes have landed. Done here (not in OnRunStart) because pushing
+                // pool MaxHp before vanilla's CurrentHp init causes vanilla to write
+                // CurrentHp = creature.MaxHp = pool MaxHp, bypassing ascension scaling.
+                var rs = RunManager.Instance?.DebugOnlyGetState();
+                if (rs != null)
+                {
+                    SoulLinkMod.ApplyingCanonical = true;
+                    try
+                    {
+                        foreach (var player in rs.Players)
+                        {
+                            if (player.Creature.MaxHp != MaxHp)
+                                player.Creature.SetMaxHp(MaxHp);
+                            if (player.Creature.CurrentHp != CurrentHp)
+                                player.Creature.SetCurrentHp(CurrentHp);
+                        }
+                    }
+                    finally { SoulLinkMod.ApplyingCanonical = false; }
+                }
             }
             return;
         }
@@ -257,16 +278,20 @@ public static class SoulLinkSession
         int sharedCurrentHp;
         if (isSaveLoad)
         {
-            // Save-load: MaxHp already reflects the additive/average choice from the
-            // initial run start. Use per-player values directly — sum if additive, else avg.
-            sharedMaxHp = additive
-                ? RoundedSum(runState.Players, p => BestMaxHp(p))
-                : RoundedAverage(runState.Players, p => BestMaxHp(p));
-            sharedCurrentHp = additive
-                ? RoundedSum(runState.Players,
-                    p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p))
-                : RoundedAverage(runState.Players,
-                    p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
+            // Save-load: every player's Creature already holds the SHARED POOL MaxHp/CurrentHp
+            // (sync writes the pool back to all players during play, and the save persists it).
+            // So take the max across players — re-aggregating with Sum would compound (N× pool)
+            // every rehost. Max (rather than [0]) tolerates any single-player desync at save time.
+            sharedMaxHp = 0;
+            sharedCurrentHp = 0;
+            for (int i = 0; i < slotCount; i++)
+            {
+                int mhp = BestMaxHp(runState.Players[i]);
+                int chp = runState.Players[i].Creature.CurrentHp;
+                if (chp <= 0) chp = mhp;
+                if (mhp > sharedMaxHp) sharedMaxHp = mhp;
+                if (chp > sharedCurrentHp) sharedCurrentHp = chp;
+            }
             SoulLinkLog.Debug($"Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp} (additive={additive})");
             _initPhaseComplete = true;
             Array.Fill(_slotCurrentHpSeeded, true);
@@ -332,7 +357,9 @@ public static class SoulLinkSession
         }
 
         // Save-load: write canonical back to all creatures so vanilla picks up restored state.
-        // Fresh run: skip — canonical is 0/0 and patches will seed from vanilla's writes.
+        // Fresh run: skip — pool MaxHp push deferred to OverwriteCanonicalHp's allSeeded
+        // finalisation so vanilla's per-slot ascension-scaled CurrentHp writes are not
+        // clobbered by `value = creature.MaxHp = pool MaxHp`.
         if (isSaveLoad)
             ApplyToAllPlayers(runState);
         IsActive = true;

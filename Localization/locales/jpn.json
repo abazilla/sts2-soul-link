@@ -65,7 +65,43 @@
   "feed": {
     "header_expanded": "ソウルリンクフィード v",
     "header_collapsed": "ソウルリンクフィード >",
-    "no_events": "（イベントなし）"
+    "no_events": "（イベントなし）",
+
+    "unit": {
+      "damage": "ダメージ",
+      "health": "HP",
+      "hp":     "HP",
+      "max_hp": "最大HP",
+      "gold":   "ゴールド"
+    },
+    "source": {
+      "event":          "イベント",
+      "rest_site":      "休憩所",
+      "shop":           "ショップ",
+      "treasure":       "宝箱",
+      "combat":         "戦闘",
+      "out_of_combat":  "戦闘外"
+    },
+    "health": {
+      "damage":            "{0} は {1} を受けた",
+      "damage_from":       "{0} は {2} から {1} を受けた",
+      "heal":              "{0} は {1} 回復した",
+      "heal_via":          "{0} は {2} で {1} 回復した",
+      "heal_and_max":      "{0} は {1} 回復し、{2} 増加した",
+      "heal_and_max_via":  "{0} は {3} で {1} 回復し、{2} 増加した",
+      "max_gain":          "{0} は {1} 増加した",
+      "max_gain_via":      "{0} は {2} で {1} 増加した",
+      "max_loss":          "{0} は {1} 減少した",
+      "max_loss_via":      "{0} は {2} で {1} 減少した"
+    },
+    "gold": {
+      "gain":           "{0} は {1} を獲得した",
+      "gain_from":      "{0} は {2} から {1} を獲得した",
+      "spend":          "{0} は {1} を消費した",
+      "spend_via":      "{0} は {2} に {1} を消費した",
+      "blocked":        "{0} は {1} を獲得できなかった（{2}）",
+      "default_source": "レリック"
+    }
   },
 
   "debug": {

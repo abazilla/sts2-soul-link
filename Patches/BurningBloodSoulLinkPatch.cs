@@ -18,7 +18,7 @@ public static class BurningBloodSoulLinkPatch
     {
         if (!SoulLinkSession.IsActive) return;
         SoulLinkMod.SuppressVgqEnqueue = true;
-        SoulLinkSession.PendingSource = "BurningBlood";
+        SoulLinkSession.PendingSource = "@relic:BurningBlood";
         SoulLinkSession.PerPeerDeterministicHeal = true;
     }
 
