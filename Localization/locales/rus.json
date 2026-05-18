@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "_comment": "Russian (rus) translations for Soul Link. Terms follow Slay the Spire RU conventions: ОЗ (Очки Здоровья) for HP, Макс. ОЗ for MaxHP, Блок (Block), Золото (Gold), Реликвия (Relic), Ход (Turn), Урон (Damage), Лечение (Healing), Игрок (Player), Хост (Host), По умолчанию (vanilla/default), Союзник (teammate). Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "Настройки Soul Link",
+
+    "hp_mode_label": "  РЕЖИМ ОЗ (только хост):",
+    "hp_mode": {
+      "shared_pool": "Общий пул ОЗ",
+      "vanilla": "По умолчанию",
+      "shared_block_shared_pool": "Общий пул ОЗ и Блока"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "Общий пул ОЗ для всех игроков",
+      "vanilla": "По умолчанию, без изменений",
+      "coming_soon": "Скоро"
+    },
+
+    "gold_mode_label": "  РЕЖИМ ЗОЛОТА (только хост):",
+    "gold_mode": {
+      "shared_pool": "Общий пул золота",
+      "vanilla": "По умолчанию",
+      "split": "Общий, золото делится поровну между игроками"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "Все игроки делят золото",
+      "split": "Полученное золото делится поровну между игроками, но тратится индивидуально",
+      "vanilla": "По умолчанию, без изменений"
+    },
+
+    "additive_starting_hp": "Суммарное стартовое ОЗ",
+    "additive_starting_hp_desc": "Пул начинается с [color=#{0}]суммы[/color] стартового ОЗ всех игроков вместо [color=#{0}]среднего[/color] (легче)",
+
+    "panels_label": "  ПАНЕЛИ (локально):",
+    "show_combat_log": "Показывать ленту Soul Link",
+    "show_combat_log_desc": "Показывать недавние события",
+    "show_debug_overlay": "Показывать отладочную панель",
+    "show_debug_overlay_desc": "Информация для разработчика"
+  },
+
+  "tip": {
+    "title": "⊞ Soul Link",
+    "centennial_puzzle":  "Также срабатывает, когда союзник получает незаблокированный урон.",
+    "self_forming_clay":  "Также срабатывает, когда союзник получает незаблокированный урон.",
+    "demon_tongue":       "Также лечит, когда союзник получает незаблокированный урон в ваш ход.",
+    "lizard_tail":        "Также предотвращает смерть союзника.",
+    "emotion_chip":       "Также срабатывает от урона, полученного союзником в прошлый ход.",
+    "spite":              "Также срабатывает от урона по союзнику.",
+    "tear_asunder":       "Также срабатывает от урона по союзнику.",
+    "fairy_in_a_bottle":  "Также спасает союзника от смерти."
+  },
+
+  "stats": {
+    "header_expanded": "Статистика забега v",
+    "header_collapsed": "Статистика забега >",
+    "damage_taken": "Получено урона",
+    "healing_gained": "Получено лечения",
+    "gold_earned": "Заработано золота",
+    "gold_spent": "Потрачено золота",
+    "row_format": "{0}: {1}"
+  },
+
+  "feed": {
+    "header_expanded": "Лента Soul Link v",
+    "header_collapsed": "Лента Soul Link >",
+    "no_events": "(событий пока нет)"
+  },
+
+  "debug": {
+    "header_expanded": "Отладка Soul Link (v{0}) v",
+    "header_collapsed": "Отладка Soul Link (v{0}) >",
+    "hp_mode": "Режим ОЗ: {0}",
+    "hp_mode_default": "По умолчанию",
+    "session_hp": "ОЗ сессии: {0} / {1}",
+    "gold_mode": "Режим золота: {0}",
+    "session_gold": "Золото сессии: {0}",
+    "gold_per_player": "Золото P0: {0}  P1: {1}"
+  }
+}

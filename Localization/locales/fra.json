@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "_comment": "French (fra) translations for Soul Link. Terms follow Slay the Spire FR conventions: PV (Points de Vie) for HP, PV Max for MaxHP, Bloc (Block), Or (Gold), Relique (Relic), Tour (Turn), Dégâts (Damage), Soins (Healing), Joueur (Player), Hôte (Host), Défaut (vanilla/default), Coéquipier (teammate). Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "Paramètres Soul Link",
+
+    "hp_mode_label": "  MODE PV (hôte uniquement) :",
+    "hp_mode": {
+      "shared_pool": "Réserve de PV partagée",
+      "vanilla": "Défaut",
+      "shared_block_shared_pool": "Réserve de PV & Bloc partagée"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "Réserve de PV partagée entre tous les joueurs",
+      "vanilla": "Défaut, comportement non modifié",
+      "coming_soon": "Bientôt disponible"
+    },
+
+    "gold_mode_label": "  MODE OR (hôte uniquement) :",
+    "gold_mode": {
+      "shared_pool": "Réserve d'Or partagée",
+      "vanilla": "Défaut",
+      "split": "Partagée, Or réparti équitablement entre joueurs"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "Tous les joueurs partagent l'Or",
+      "split": "L'Or gagné est réparti équitablement entre les joueurs, mais dépensé individuellement",
+      "vanilla": "Défaut, comportement non modifié"
+    },
+
+    "additive_starting_hp": "PV de départ additifs",
+    "additive_starting_hp_desc": "La réserve commence à la [color=#{0}]somme[/color] des PV de départ de tous les joueurs au lieu de la [color=#{0}]moyenne[/color] (plus facile)",
+
+    "panels_label": "  PANNEAUX (local) :",
+    "show_combat_log": "Afficher le Flux Soul Link",
+    "show_combat_log_desc": "Afficher les événements récents",
+    "show_debug_overlay": "Afficher la superposition de débogage",
+    "show_debug_overlay_desc": "Informations développeur"
+  },
+
+  "tip": {
+    "title": "⊞ Soul Link",
+    "centennial_puzzle":  "Se déclenche aussi lorsque votre coéquipier subit des dégâts non bloqués.",
+    "self_forming_clay":  "Se déclenche aussi lorsque votre coéquipier subit des dégâts non bloqués.",
+    "demon_tongue":       "Soigne aussi lorsque votre coéquipier subit des dégâts non bloqués pendant votre tour.",
+    "lizard_tail":        "Empêche aussi votre coéquipier de mourir.",
+    "emotion_chip":       "Se déclenche aussi avec les dégâts subis par votre coéquipier au tour précédent.",
+    "spite":              "Se déclenche aussi avec les dégâts subis par votre coéquipier.",
+    "tear_asunder":       "Se déclenche aussi avec les dégâts subis par votre coéquipier.",
+    "fairy_in_a_bottle":  "Sauve aussi votre coéquipier de la mort."
+  },
+
+  "stats": {
+    "header_expanded": "Stats de la partie v",
+    "header_collapsed": "Stats de la partie >",
+    "damage_taken": "Dégâts subis",
+    "healing_gained": "Soins reçus",
+    "gold_earned": "Or gagné",
+    "gold_spent": "Or dépensé",
+    "row_format": "{0} : {1}"
+  },
+
+  "feed": {
+    "header_expanded": "Flux Soul Link v",
+    "header_collapsed": "Flux Soul Link >",
+    "no_events": "(aucun événement)"
+  },
+
+  "debug": {
+    "header_expanded": "Débogage Soul Link (v{0}) v",
+    "header_collapsed": "Débogage Soul Link (v{0}) >",
+    "hp_mode": "Mode PV : {0}",
+    "hp_mode_default": "Défaut",
+    "session_hp": "PV de session : {0} / {1}",
+    "gold_mode": "Mode Or : {0}",
+    "session_gold": "Or de session : {0}",
+    "gold_per_player": "Or P0 : {0}  P1 : {1}"
+  }
+}

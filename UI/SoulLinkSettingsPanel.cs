@@ -2,6 +2,7 @@ using System;
 using Godot;
 
 using SoulLinkMod;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod.UI;
 
@@ -56,6 +57,9 @@ public class SoulLinkSettingsPanel : Control
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    // Stable delegate ref so we can Unsubscribe with the same instance.
+    private MegaCrit.Sts2.Core.Localization.LocManager.LocaleChangeCallback? _localeChangeCb;
+
     /// <summary>
     /// Called after the panel is added to a CanvasLayer. Builds the UI tree but leaves
     /// the panel hidden — call Show(isHost) once the lobby mode is known.
@@ -78,10 +82,38 @@ public class SoulLinkSettingsPanel : Control
             MouseFilter = MouseFilterEnum.Stop; // consume clicks so they don't fall through
 
             BuildUi();
+
+            // Captured-string controls (Button.Text, OptionButton items, descriptors) don't
+            // re-resolve on locale change — rebuild the subtree so labels pick up the new
+            // language without forcing the user to reopen the panel.
+            _localeChangeCb = OnLocaleChanged;
+            LocaleBus.Subscribe(_localeChangeCb);
         }
         catch (Exception ex)
         {
             SoulLinkLog.Error($"SoulLinkSettingsPanel.Initialize crashed: {ex}");
+        }
+    }
+
+    private void OnLocaleChanged()
+    {
+        try
+        {
+            // Tear down + rebuild. _isClientMode / _refreshing / Visible / Current
+            // are fields, so they survive — only the Godot subtree is replaced.
+            foreach (var child in GetChildren()) child.QueueFree();
+            _margin = null;
+            _hpModeOption = null; _cbAdditiveStartingHp = null;
+            _goldModeOption = null; _cbSharedLoseHp = null;
+            _cbShowCombatLog = null; _cbShowRunStats = null; _cbShowDebugOverlay = null;
+            _descHpMode = null; _descAdditiveStartingHp = null; _descGoldMode = null;
+
+            BuildUi();
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            SoulLinkLog.Error($"SoulLinkSettingsPanel.OnLocaleChanged crashed: {ex}");
         }
     }
 
@@ -113,6 +145,11 @@ public class SoulLinkSettingsPanel : Control
 
     public override void _ExitTree()
     {
+        if (_localeChangeCb != null)
+        {
+            LocaleBus.Unsubscribe(_localeChangeCb);
+            _localeChangeCb = null;
+        }
         if (Current == this) Current = null;
     }
 
@@ -135,16 +172,16 @@ public class SoulLinkSettingsPanel : Control
         margin.AddChild(vbox);
 
         // Header
-        var header = MakeLabel($"Soul Link Settings (v{SoulLinkMod.Version})", ColHeader, 18);
+        var header = MakeLabel($"{Loc.T("settings.header")} (v{SoulLinkMod.Version})", ColHeader, 18);
         vbox.AddChild(header);
         vbox.AddChild(MakeSpacer(8));
 
         // ── Run Settings ──────────────────────────────────────────────────────
-        vbox.AddChild(MakeLabel("  HP MODE (host only):", ColAccentYellow, 16));
+        vbox.AddChild(MakeLabel(Loc.T("settings.hp_mode_label"), ColAccentYellow, 16));
 
         _hpModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
-        _hpModeOption.AddItem("Shared HP pool",       (int)HpMode.SharedPool);
-        _hpModeOption.AddItem("Default",        (int)HpMode.Vanilla);
+        _hpModeOption.AddItem(Loc.T("settings.hp_mode.shared_pool"), (int)HpMode.SharedPool);
+        _hpModeOption.AddItem(Loc.T("settings.hp_mode.vanilla"),     (int)HpMode.Vanilla);
         // _hpModeOption.AddItem("Shared HP & Block Pool",     (int)HpMode.SharedBlockSharedPool);
         _hpModeOption.AddThemeFontSizeOverride("font_size", 17);
         ApplyOptionButtonAccent(_hpModeOption, ColAccentYellow);
@@ -177,7 +214,7 @@ public class SoulLinkSettingsPanel : Control
         _descHpMode = MakeDescriptor(HpModeDescriptor(SoulLinkSettings.Instance.HpMode));
         vbox.AddChild(WrapDescriptor(_descHpMode));
 
-        _cbAdditiveStartingHp = MakeCheckBox("Additive starting HP");
+        _cbAdditiveStartingHp = MakeCheckBox(Loc.T("settings.additive_starting_hp"));
         _cbAdditiveStartingHp.Toggled += on =>
         {
             if (_refreshing) return;
@@ -188,15 +225,15 @@ public class SoulLinkSettingsPanel : Control
         };
         vbox.AddChild(Indent(_cbAdditiveStartingHp));
         _descAdditiveStartingHp = MakeRichDescriptor(
-            $"Pool starts at [color=#{ColHpGreen.ToHtml(false)}]sum[/color] of all players' starting HP instead of [color=#{ColHpGreen.ToHtml(false)}]average[/color] (easier)");
+            Loc.Tf("settings.additive_starting_hp_desc", ColHpGreen.ToHtml(false)));
         vbox.AddChild(WrapDescriptorControl(_descAdditiveStartingHp));
 
         vbox.AddChild(MakeSpacer(12));
-        vbox.AddChild(MakeLabel("  GOLD MODE (host only):", ColSection, 16));
+        vbox.AddChild(MakeLabel(Loc.T("settings.gold_mode_label"), ColSection, 16));
 
         _goldModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
-        _goldModeOption.AddItem("Shared Gold pool",          (int)GoldSharingMode.SharedPool);
-        _goldModeOption.AddItem("Default",    (int)GoldSharingMode.Default);
+        _goldModeOption.AddItem(Loc.T("settings.gold_mode.shared_pool"), (int)GoldSharingMode.SharedPool);
+        _goldModeOption.AddItem(Loc.T("settings.gold_mode.vanilla"),     (int)GoldSharingMode.Default);
         // Turning this off for now - to add in the future
         // _goldModeOption.AddItem("Shared, Split Gold by players",    (int)GoldSharingMode.SplitByPlayer);
         _goldModeOption.AddThemeFontSizeOverride("font_size", 17);
@@ -226,17 +263,17 @@ public class SoulLinkSettingsPanel : Control
 
         // ── Panel Settings ────────────────────────────────────────────────────
         vbox.AddChild(MakeSpacer(12));
-        vbox.AddChild(MakeLabel("  PANELS (local):", ColSection, 16));
+        vbox.AddChild(MakeLabel(Loc.T("settings.panels_label"), ColSection, 16));
 
-        _cbShowCombatLog = MakeCheckBox("Show Soul Link Feed");
+        _cbShowCombatLog = MakeCheckBox(Loc.T("settings.show_combat_log"));
         _cbShowCombatLog.Toggled += on => { SoulLinkSettings.Instance.ShowCombatLog = on; SoulLinkSettings.Save(); };
         vbox.AddChild(Indent(_cbShowCombatLog));
-        vbox.AddChild(WrapDescriptor(MakeDescriptor("Show recent events")));
+        vbox.AddChild(WrapDescriptor(MakeDescriptor(Loc.T("settings.show_combat_log_desc"))));
 
-        _cbShowDebugOverlay = MakeCheckBox("Show Debug Overlay");
+        _cbShowDebugOverlay = MakeCheckBox(Loc.T("settings.show_debug_overlay"));
         _cbShowDebugOverlay.Toggled += on => { SoulLinkSettings.Instance.ShowDebugOverlay = on; SoulLinkSettings.Save(); };
         vbox.AddChild(Indent(_cbShowDebugOverlay));
-        vbox.AddChild(WrapDescriptor(MakeDescriptor("Developer info")));
+        vbox.AddChild(WrapDescriptor(MakeDescriptor(Loc.T("settings.show_debug_overlay_desc"))));
 
     }
 
@@ -608,16 +645,16 @@ public class SoulLinkSettingsPanel : Control
 
     private static string HpModeDescriptor(HpMode mode) => mode switch
     {
-        HpMode.Vanilla                => "Default, unmodded behavior",
-        HpMode.SharedBlockSharedPool  => "Coming soon",
-        _                             => "Shared HP pool across all players",
+        HpMode.Vanilla                => Loc.T("settings.hp_mode_desc.vanilla"),
+        HpMode.SharedBlockSharedPool  => Loc.T("settings.hp_mode_desc.coming_soon"),
+        _                             => Loc.T("settings.hp_mode_desc.shared_pool"),
     };
 
     private static string GoldModeDescriptor(GoldSharingMode mode) => mode switch
     {
-        GoldSharingMode.SharedPool    => "All players share gold",
-        GoldSharingMode.SplitByPlayer => "Gold earned is split evenly amongst players, but is spent individually",
-        _                             => "Default, unmodded behavior",
+        GoldSharingMode.SharedPool    => Loc.T("settings.gold_mode_desc.shared_pool"),
+        GoldSharingMode.SplitByPlayer => Loc.T("settings.gold_mode_desc.split"),
+        _                             => Loc.T("settings.gold_mode_desc.vanilla"),
     };
 
     private static Control MakeSpacer(int height)

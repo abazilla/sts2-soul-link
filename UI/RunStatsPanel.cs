@@ -2,6 +2,7 @@ using System;
 using Godot;
 
 using SoulLinkMod;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod.UI;
 
@@ -38,6 +39,8 @@ public class RunStatsPanel : Control
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    private MegaCrit.Sts2.Core.Localization.LocManager.LocaleChangeCallback? _localeChangeCb;
+
     public void Initialize()
     {
         try
@@ -58,6 +61,11 @@ public class RunStatsPanel : Control
 
             BuildUI();
             Refresh();
+
+            // DoRefresh re-applies every label from Loc.T, so a plain Refresh() picks
+            // up the new locale's strings — no rebuild needed here.
+            _localeChangeCb = Refresh;
+            LocaleBus.Subscribe(_localeChangeCb);
         }
         catch (Exception ex)
         {
@@ -71,6 +79,16 @@ public class RunStatsPanel : Control
         catch (Exception ex) { SoulLinkLog.Error($"RunStatsPanel.Refresh crashed: {ex}"); }
     }
 
+    public override void _ExitTree()
+    {
+        if (_localeChangeCb != null)
+        {
+            LocaleBus.Unsubscribe(_localeChangeCb);
+            _localeChangeCb = null;
+        }
+        if (Current == this) Current = null;
+    }
+
     public static void Clear() => Current = null;
 
     // ── Build ─────────────────────────────────────────────────────────────────
@@ -82,7 +100,7 @@ public class RunStatsPanel : Control
         AddChild(vbox);
 
         // Header button — borderless, looks like a plain clickable label.
-        _toggleButton = new Button { Text = "Run Stats v" };
+        _toggleButton = new Button { Text = Loc.T("stats.header_expanded") };
         _toggleButton.Alignment = HorizontalAlignment.Left;
         _toggleButton.Pressed += OnToggle;
         ApplyHeaderButtonStyle(_toggleButton);
@@ -155,21 +173,21 @@ public class RunStatsPanel : Control
         Visible = SoulLinkSession.IsActive;
         if (!Visible) return;
 
-        if (_damageLbl     != null) SetStat(_damageLbl,     "Damage taken",   SoulLinkSession.TotalDamageTaken,   ColorDamage);
-        if (_healLbl       != null) SetStat(_healLbl,       "Healing gained", SoulLinkSession.TotalHealingGained, ColorHeal);
-        if (_goldEarnedLbl != null) SetStat(_goldEarnedLbl, "Gold earned",    SoulLinkSession.TotalGoldEarned,    ColorGoldGain);
-        if (_goldSpentLbl  != null) SetStat(_goldSpentLbl,  "Gold spent",     SoulLinkSession.TotalGoldSpent,     ColorGoldSpend);
+        if (_damageLbl     != null) SetStat(_damageLbl,     Loc.T("stats.damage_taken"),   SoulLinkSession.TotalDamageTaken,   ColorDamage);
+        if (_healLbl       != null) SetStat(_healLbl,       Loc.T("stats.healing_gained"), SoulLinkSession.TotalHealingGained, ColorHeal);
+        if (_goldEarnedLbl != null) SetStat(_goldEarnedLbl, Loc.T("stats.gold_earned"),    SoulLinkSession.TotalGoldEarned,    ColorGoldGain);
+        if (_goldSpentLbl  != null) SetStat(_goldSpentLbl,  Loc.T("stats.gold_spent"),     SoulLinkSession.TotalGoldSpent,     ColorGoldSpend);
 
         if (_bgPanel != null)
             _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
-            _toggleButton.Text = _expanded ? "Run Stats v" : "Run Stats >";
+            _toggleButton.Text = Loc.T(_expanded ? "stats.header_expanded" : "stats.header_collapsed");
     }
 
     private static void SetStat(Label lbl, string label, int value, Color color)
     {
-        lbl.Text = $"{label}:  {value}";
+        lbl.Text = Loc.Tf("stats.row_format", label, value);
         lbl.AddThemeColorOverride("font_color", color);
     }
 

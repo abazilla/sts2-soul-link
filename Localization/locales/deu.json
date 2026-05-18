@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "_comment": "German (deu) translations for Soul Link. Terms follow Slay the Spire DE conventions: LP (Lebenspunkte) for HP, Max-LP for MaxHP, Block, Gold, Relikt, Zug (Turn), Schaden (Damage), Heilung (Healing), Spieler (Player), Host, Standard (vanilla/default), Teamkamerad (teammate). Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "Soul Link Einstellungen",
+
+    "hp_mode_label": "  LP-MODUS (nur Host):",
+    "hp_mode": {
+      "shared_pool": "Geteilter LP-Pool",
+      "vanilla": "Standard",
+      "shared_block_shared_pool": "Geteilter LP- & Block-Pool"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "Geteilter LP-Pool für alle Spieler",
+      "vanilla": "Standard, unverändertes Verhalten",
+      "coming_soon": "Demnächst verfügbar"
+    },
+
+    "gold_mode_label": "  GOLD-MODUS (nur Host):",
+    "gold_mode": {
+      "shared_pool": "Geteilter Gold-Pool",
+      "vanilla": "Standard",
+      "split": "Geteilt, Gold gleichmäßig auf Spieler aufgeteilt"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "Alle Spieler teilen sich das Gold",
+      "split": "Erhaltenes Gold wird gleichmäßig unter den Spielern aufgeteilt, aber einzeln ausgegeben",
+      "vanilla": "Standard, unverändertes Verhalten"
+    },
+
+    "additive_starting_hp": "Additive Start-LP",
+    "additive_starting_hp_desc": "Pool startet mit [color=#{0}]Summe[/color] der Start-LP aller Spieler statt [color=#{0}]Durchschnitt[/color] (einfacher)",
+
+    "panels_label": "  PANELS (lokal):",
+    "show_combat_log": "Soul Link Feed anzeigen",
+    "show_combat_log_desc": "Aktuelle Ereignisse anzeigen",
+    "show_debug_overlay": "Debug-Overlay anzeigen",
+    "show_debug_overlay_desc": "Entwicklerinfos"
+  },
+
+  "tip": {
+    "title": "⊞ Soul Link",
+    "centennial_puzzle":  "Wird auch ausgelöst, wenn dein Teamkamerad ungeblockten Schaden erleidet.",
+    "self_forming_clay":  "Wird auch ausgelöst, wenn dein Teamkamerad ungeblockten Schaden erleidet.",
+    "demon_tongue":       "Heilt auch, wenn dein Teamkamerad während deines Zuges ungeblockten Schaden erleidet.",
+    "lizard_tail":        "Verhindert auch den Tod deines Teamkameraden.",
+    "emotion_chip":       "Wird auch durch Schaden ausgelöst, den dein Teamkamerad letzten Zug erlitten hat.",
+    "spite":              "Wird auch durch Schaden an deinem Teamkameraden ausgelöst.",
+    "tear_asunder":       "Wird auch durch Schaden an deinem Teamkameraden ausgelöst.",
+    "fairy_in_a_bottle":  "Bewahrt auch deinen Teamkameraden vor dem Tod."
+  },
+
+  "stats": {
+    "header_expanded": "Run-Statistik v",
+    "header_collapsed": "Run-Statistik >",
+    "damage_taken": "Erlittener Schaden",
+    "healing_gained": "Erhaltene Heilung",
+    "gold_earned": "Verdientes Gold",
+    "gold_spent": "Ausgegebenes Gold",
+    "row_format": "{0}: {1}"
+  },
+
+  "feed": {
+    "header_expanded": "Soul Link Feed v",
+    "header_collapsed": "Soul Link Feed >",
+    "no_events": "(noch keine Ereignisse)"
+  },
+
+  "debug": {
+    "header_expanded": "Soul Link Debug (v{0}) v",
+    "header_collapsed": "Soul Link Debug (v{0}) >",
+    "hp_mode": "LP-Modus: {0}",
+    "hp_mode_default": "Standard",
+    "session_hp": "Sitzungs-LP: {0} / {1}",
+    "gold_mode": "Gold-Modus: {0}",
+    "session_gold": "Sitzungs-Gold: {0}",
+    "gold_per_player": "Gold P0: {0}  P1: {1}"
+  }
+}

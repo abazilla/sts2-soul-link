@@ -1,0 +1,81 @@
+{
+  "_meta": {
+    "_comment": "Korean (kor) translations for Soul Link. Terms follow Slay the Spire KR conventions: 체력 (HP), 최대 체력 (MaxHP), 방어도 (Block), 골드 (Gold), 유물 (Relic), 턴 (Turn), 피해 (Damage), 회복 (Healing), 플레이어 (Player), 호스트 (Host), 기본 (vanilla/default), 동료 (teammate). Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "소울 링크 설정",
+
+    "hp_mode_label": "  체력 모드 (호스트 전용):",
+    "hp_mode": {
+      "shared_pool": "체력 공유 풀",
+      "vanilla": "기본",
+      "shared_block_shared_pool": "체력 및 방어도 공유 풀"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "모든 플레이어가 체력 풀을 공유",
+      "vanilla": "기본, 미개조 동작",
+      "coming_soon": "출시 예정"
+    },
+
+    "gold_mode_label": "  골드 모드 (호스트 전용):",
+    "gold_mode": {
+      "shared_pool": "골드 공유 풀",
+      "vanilla": "기본",
+      "split": "공유, 플레이어 간 골드 균등 분배"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "모든 플레이어가 골드를 공유",
+      "split": "획득한 골드는 플레이어 간 균등 분배되며, 소비는 개별",
+      "vanilla": "기본, 미개조 동작"
+    },
+
+    "additive_starting_hp": "체력 합산 시작",
+    "additive_starting_hp_desc": "풀이 모든 플레이어 시작 체력의 [color=#{0}]평균[/color] 대신 [color=#{0}]합계[/color]로 시작 (쉬움)",
+
+    "panels_label": "  패널 (로컬):",
+    "show_combat_log": "소울 링크 피드 표시",
+    "show_combat_log_desc": "최근 이벤트 표시",
+    "show_debug_overlay": "디버그 오버레이 표시",
+    "show_debug_overlay_desc": "개발자 정보"
+  },
+
+  "tip": {
+    "title": "⊞ 소울 링크",
+    "centennial_puzzle":  "동료가 막지 못한 피해를 받을 때도 발동.",
+    "self_forming_clay":  "동료가 막지 못한 피해를 받을 때도 발동.",
+    "demon_tongue":       "당신의 턴에 동료가 막지 못한 피해를 받을 때도 회복.",
+    "lizard_tail":        "동료의 사망도 방지.",
+    "emotion_chip":       "동료가 이전 턴에 받은 피해로도 발동.",
+    "spite":              "동료가 피해를 받을 때도 발동.",
+    "tear_asunder":       "동료가 피해를 받을 때도 발동.",
+    "fairy_in_a_bottle":  "동료의 사망도 방지."
+  },
+
+  "stats": {
+    "header_expanded": "플레이 통계 v",
+    "header_collapsed": "플레이 통계 >",
+    "damage_taken": "받은 피해",
+    "healing_gained": "회복량",
+    "gold_earned": "획득 골드",
+    "gold_spent": "사용 골드",
+    "row_format": "{0}: {1}"
+  },
+
+  "feed": {
+    "header_expanded": "소울 링크 피드 v",
+    "header_collapsed": "소울 링크 피드 >",
+    "no_events": "(이벤트 없음)"
+  },
+
+  "debug": {
+    "header_expanded": "소울 링크 디버그 (v{0}) v",
+    "header_collapsed": "소울 링크 디버그 (v{0}) >",
+    "hp_mode": "체력 모드: {0}",
+    "hp_mode_default": "기본",
+    "session_hp": "세션 체력: {0} / {1}",
+    "gold_mode": "골드 모드: {0}",
+    "session_gold": "세션 골드: {0}",
+    "gold_per_player": "골드 P0: {0}  P1: {1}"
+  }
+}

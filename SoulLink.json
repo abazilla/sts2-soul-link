@@ -3,7 +3,7 @@
 	"name": "Soul Link",
 	"author": "aba",
 	"description": "Co-op shared HP & gold pool. All players share one HP pool and one gold pool. Configure sync modes from the Settings menu.",
-	"version": "0.31.0",
+	"version": "0.31.6",
 	"has_dll": true,
 	"has_pck": false,
 	"dependencies": [],
