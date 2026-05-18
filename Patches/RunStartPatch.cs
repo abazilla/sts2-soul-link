@@ -106,6 +106,7 @@ internal static class SettingsSyncHandler
             GoldMode     = (GoldSharingMode)message.GoldMode,
             SharedLoseHp = message.SharedLoseHp,
             HpMode       = (HpMode)message.HpMode,
+            StartingHpMode = (StartingHpMode)message.StartingHpMode,
         };
 
         if (SoulLinkSession.IsActive)
@@ -472,6 +473,7 @@ public static class RunLaunchPatch
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
                 HpMode       = (int)rs.HpMode,
+                StartingHpMode = (int)rs.StartingHpMode,
             });
         }
 

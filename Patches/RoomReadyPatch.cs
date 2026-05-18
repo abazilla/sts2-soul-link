@@ -130,6 +130,7 @@ internal static class RoomPanelInjector
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
                 HpMode       = (int)rs.HpMode,
+                StartingHpMode = (int)rs.StartingHpMode,
             });
             SoulLinkLog.Debug("Re-sent settings sync from host at room entry.");
         }

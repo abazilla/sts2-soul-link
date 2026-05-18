@@ -43,6 +43,7 @@ public class SoulLinkSettings
     /// </summary>
     public bool SharedLoseHp { get; set; } = true;
     public HpMode HpMode { get; set; } = HpMode.SharedPool;
+    public StartingHpMode StartingHpMode { get; set; } = StartingHpMode.Average;
 
     // ── Panel visibility (local-only, never broadcast) ────────────────────────
 
@@ -60,6 +61,7 @@ public class SoulLinkSettings
         GoldMode     = GoldMode,
         SharedLoseHp = SharedLoseHp,
         HpMode       = HpMode,
+        StartingHpMode = StartingHpMode,
     };
 
     // ── Persistence ───────────────────────────────────────────────────────────

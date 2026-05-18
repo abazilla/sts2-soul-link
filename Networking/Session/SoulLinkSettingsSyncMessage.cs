@@ -20,6 +20,8 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
     public bool SharedLoseHp;
     /// <summary>Cast of <see cref="HpMode"/> — serialized as int for wire format. Defaults to SharedPool if absent (old peer).</summary>
     public int HpMode;
+    /// <summary>Cast of <see cref="StartingHpMode"/> — serialized as int. Defaults to Average if absent (old peer).</summary>
+    public int StartingHpMode;
 
     // Host -> all clients. Must be true so multi-client lobbies receive the sync on every peer,
     // not just one. Receiver guards against self-apply when running on the host.
@@ -34,6 +36,7 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
         writer.WriteInt(GoldMode);
         writer.WriteBool(SharedLoseHp);
         writer.WriteInt(HpMode);
+        writer.WriteInt(StartingHpMode);
     }
 
     public void Deserialize(PacketReader reader)
@@ -45,5 +48,8 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
         // HpMode added after initial release; default to SharedPool (0) if the stream ends early.
         try { HpMode = reader.ReadInt(); }
         catch { HpMode = 0; }
+        // StartingHpMode added after HpMode; default to Average (0) if absent.
+        try { StartingHpMode = reader.ReadInt(); }
+        catch { StartingHpMode = 0; }
     }
 }

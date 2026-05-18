@@ -42,6 +42,7 @@ public class SoulLinkSettingsPanel : Control
     private OptionButton? _hpModeOption;
     private CheckBox?     _cbSplitMaxHp;
     private CheckBox?     _cbSplitHeal;
+    private CheckBox?     _cbAdditiveStartingHp;
     private OptionButton? _goldModeOption;
     private CheckBox?     _cbSharedLoseHp;
 
@@ -54,6 +55,7 @@ public class SoulLinkSettingsPanel : Control
     private Label? _descHpMode;
     private RichTextLabel? _descSplitMaxHp;
     private RichTextLabel? _descSplitHeal;
+    private RichTextLabel? _descAdditiveStartingHp;
     private Label? _descGoldMode;  // dynamic — text changes with selection
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -186,6 +188,20 @@ public class SoulLinkSettingsPanel : Control
             $"eg [color=#{ColHpGreen.ToHtml(false)}]+10 MaxHP[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5 MaxHP[/color] to the MaxHP pool (for 2 players)");
         vbox.AddChild(WrapDescriptorControl(_descSplitMaxHp));
 
+        _cbAdditiveStartingHp = MakeCheckBox("Additive starting HP");
+        _cbAdditiveStartingHp.Toggled += on =>
+        {
+            if (_refreshing) return;
+            SoulLinkLog.Debug($"[SyncDiag] Toggled StartingHpMode={(on ? StartingHpMode.Additive : StartingHpMode.Average)} isClient={_isClientMode}");
+            SoulLinkSettings.Instance.StartingHpMode = on ? StartingHpMode.Additive : StartingHpMode.Average;
+            SoulLinkSettings.Save();
+            if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
+        };
+        vbox.AddChild(Indent(_cbAdditiveStartingHp));
+        _descAdditiveStartingHp = MakeRichDescriptor(
+            $"Pool starts at [color=#{ColHpGreen.ToHtml(false)}]sum[/color] of all players' starting HP instead of [color=#{ColHpGreen.ToHtml(false)}]average[/color] (easier)");
+        vbox.AddChild(WrapDescriptorControl(_descAdditiveStartingHp));
+
         _cbSplitHeal = MakeCheckBox("Split healing by players");
         _cbSplitHeal.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitHeal={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
         vbox.AddChild(Indent(_cbSplitHeal));
@@ -263,6 +279,7 @@ public class SoulLinkSettingsPanel : Control
         bool splitMaxHp, splitHeal, sharedLoseHp;
         GoldSharingMode goldMode;
         HpMode hpMode;
+        StartingHpMode startingHpMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
@@ -271,6 +288,7 @@ public class SoulLinkSettingsPanel : Control
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
             hpMode       = rs.HpMode;
+            startingHpMode = rs.StartingHpMode;
         }
         else if (_isClientMode && SoulLinkSession.PendingSyncedRunSettings.HasValue)
         {
@@ -280,6 +298,7 @@ public class SoulLinkSettingsPanel : Control
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
             hpMode       = rs.HpMode;
+            startingHpMode = rs.StartingHpMode;
         }
         else
         {
@@ -289,6 +308,7 @@ public class SoulLinkSettingsPanel : Control
             goldMode     = s.GoldMode;
             sharedLoseHp = s.SharedLoseHp;
             hpMode       = s.HpMode;
+            startingHpMode = s.StartingHpMode;
         }
 
         // HP-related settings are ignored when HpMode == Vanilla; grey them out.
@@ -318,12 +338,15 @@ public class SoulLinkSettingsPanel : Control
         bool hpAxisVisible = hpMode != HpMode.Vanilla;
         SetRowVisible(_cbSplitMaxHp, _descSplitMaxHp, hpAxisVisible);
         SetRowVisible(_cbSplitHeal,  _descSplitHeal,  hpAxisVisible);
+        SetRowVisible(_cbAdditiveStartingHp, _descAdditiveStartingHp, hpAxisVisible);
         SetRowVisible(_cbSharedLoseHp, null,          hpAxisVisible);
 
         SetCheckBox(_cbSplitMaxHp, splitMaxHp, hpAxisEditable, lockedTint);
         SetDescriptor(_descSplitMaxHp, hpAxisEditable, lockedTint);
         SetCheckBox(_cbSplitHeal,  splitHeal,  hpAxisEditable, lockedTint);
         SetDescriptor(_descSplitHeal, hpAxisEditable, lockedTint);
+        SetCheckBox(_cbAdditiveStartingHp, startingHpMode == StartingHpMode.Additive, hpAxisEditable, lockedTint);
+        SetDescriptor(_descAdditiveStartingHp, hpAxisEditable, lockedTint);
         SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, hpAxisEditable, lockedTint);
 
         if (_goldModeOption != null)

@@ -36,6 +36,13 @@ public struct SoulLinkRunSettings
     /// </summary>
     public HpMode HpMode;
 
+    /// <summary>
+    /// Controls whether the shared HP pool's starting MaxHp/CurrentHp is the average
+    /// (current default) or the sum of all players' starting HP. Only meaningful when
+    /// <see cref="HpMode"/> is SharedPool.
+    /// </summary>
+    public StartingHpMode StartingHpMode;
+
     /// <summary>Returns a SoulLinkRunSettings with the recommended defaults.</summary>
     public static SoulLinkRunSettings Default => new SoulLinkRunSettings
     {
@@ -44,5 +51,6 @@ public struct SoulLinkRunSettings
         GoldMode     = GoldSharingMode.Default,
         SharedLoseHp = true,
         HpMode       = HpMode.SharedPool,
+        StartingHpMode = StartingHpMode.Average,
     };
 }

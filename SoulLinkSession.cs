@@ -130,8 +130,10 @@ public static class SoulLinkSession
             {
                 double sum = 0;
                 for (int i = 0; i < _initialCurrentHpSeeds.Length; i++) sum += _initialCurrentHpSeeds[i];
-                int avg = (int)Math.Round(sum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
-                CurrentHp = Math.Min(avg, MaxHp);
+                int finalHp = ActiveRunSettings.StartingHpMode == StartingHpMode.Additive
+                    ? (int)Math.Min(sum, int.MaxValue)
+                    : (int)Math.Round(sum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
+                CurrentHp = Math.Min(finalHp, MaxHp);
             }
             return;
         }
@@ -226,34 +228,8 @@ public static class SoulLinkSession
         if (_slotCurrentHpSeeded.Length   != slotCount) _slotCurrentHpSeeded   = new bool[slotCount];
         if (_initialCurrentHpSeeds.Length != slotCount) _initialCurrentHpSeeds = new int[slotCount];
 
-        int sharedMaxHp;
-        int sharedCurrentHp;
-        if (isSaveLoad)
-        {
-            sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
-            sharedCurrentHp = RoundedAverage(runState.Players,
-                p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
-            SoulLinkLog.Debug($"Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp}");
-            _initPhaseComplete = true;
-            Array.Fill(_slotCurrentHpSeeded, true);
-            for (int i = 0; i < slotCount; i++)
-                _initialCurrentHpSeeds[i] = runState.Players[i].Creature.CurrentHp;
-        }
-        else
-        {
-            // Fresh run: seed pool MaxHp from the average of each player's character MaxHp
-            // (creatures already carry their starting MaxHp before any ascension scaling
-            // touches CurrentHp). CurrentHp is deferred — captured per-slot by HpSyncPatch
-            // during vanilla's ascension writes, then averaged once every slot has reported.
-            sharedMaxHp = RoundedAverage(runState.Players, p => BestMaxHp(p));
-            sharedCurrentHp = 0;
-            _initPhaseComplete = false;
-            Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
-            Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
-            SoulLinkLog.Debug($"Fresh run — pool MaxHp seeded to {sharedMaxHp}; CurrentHp deferred until vanilla's per-peer ascension writes finish.");
-        }
-
-        // Determine which run settings to use.
+        // Determine which run settings to use BEFORE seeding so StartingHpMode can pick
+        // between average and additive seeding.
         if (PendingSyncedRunSettings.HasValue)
         {
             ActiveRunSettings = PendingSyncedRunSettings.Value;
@@ -274,7 +250,44 @@ public static class SoulLinkSession
 
         // Always re-save so re-hosting from this save will see the correct settings.
         SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
-        SoulLinkLog.Debug($"Run settings: HpMode={ActiveRunSettings.HpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"Run settings: HpMode={ActiveRunSettings.HpMode}, StartingHpMode={ActiveRunSettings.StartingHpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+
+        bool additive = ActiveRunSettings.StartingHpMode == StartingHpMode.Additive;
+        int sharedMaxHp;
+        int sharedCurrentHp;
+        if (isSaveLoad)
+        {
+            // Save-load: MaxHp already reflects the additive/average choice from the
+            // initial run start. Use per-player values directly — sum if additive, else avg.
+            sharedMaxHp = additive
+                ? RoundedSum(runState.Players, p => BestMaxHp(p))
+                : RoundedAverage(runState.Players, p => BestMaxHp(p));
+            sharedCurrentHp = additive
+                ? RoundedSum(runState.Players,
+                    p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p))
+                : RoundedAverage(runState.Players,
+                    p => p.Creature.CurrentHp > 0 ? p.Creature.CurrentHp : BestMaxHp(p));
+            SoulLinkLog.Debug($"Save-load detected. Restoring MaxHp={sharedMaxHp}, CurrentHp={sharedCurrentHp} (additive={additive})");
+            _initPhaseComplete = true;
+            Array.Fill(_slotCurrentHpSeeded, true);
+            for (int i = 0; i < slotCount; i++)
+                _initialCurrentHpSeeds[i] = runState.Players[i].Creature.CurrentHp;
+        }
+        else
+        {
+            // Fresh run: seed pool MaxHp from the chosen aggregate of each player's character MaxHp
+            // (creatures already carry their starting MaxHp before any ascension scaling
+            // touches CurrentHp). CurrentHp is deferred — captured per-slot by HpSyncPatch
+            // during vanilla's ascension writes, then aggregated once every slot has reported.
+            sharedMaxHp = additive
+                ? RoundedSum(runState.Players, p => BestMaxHp(p))
+                : RoundedAverage(runState.Players, p => BestMaxHp(p));
+            sharedCurrentHp = 0;
+            _initPhaseComplete = false;
+            Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
+            Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
+            SoulLinkLog.Debug($"Fresh run — pool MaxHp seeded to {sharedMaxHp} (additive={additive}); CurrentHp deferred until vanilla's per-peer ascension writes finish.");
+        }
 
         // Vanilla HpMode never routes through ApplyHpDelta, so the in-combat trigger that
         // flips _initPhaseComplete never fires. Mark complete now so gold log entries
@@ -663,6 +676,7 @@ public static class SoulLinkSession
                 GoldMode     = (int)s.GoldMode,
                 SharedLoseHp = s.SharedLoseHp,
                 HpMode       = (int)s.HpMode,
+                StartingHpMode = (int)s.StartingHpMode,
             };
 
             var net = RunManager.Instance?.NetService;
@@ -721,5 +735,12 @@ public static class SoulLinkSession
         double sum = 0;
         foreach (var p in players) sum += selector(p);
         return (int)Math.Round(sum / players.Count, MidpointRounding.AwayFromZero);
+    }
+
+    private static int RoundedSum(IReadOnlyList<Player> players, Func<Player, int> selector)
+    {
+        long sum = 0;
+        foreach (var p in players) sum += selector(p);
+        return (int)Math.Min(sum, int.MaxValue);
     }
 }
