@@ -8,13 +8,13 @@ namespace SoulLinkMod;
 public enum HpMode
 {
     /// <summary>
-    /// Shared HP pool across all players. SplitMaxHp and SplitHeal are respected.
+    /// Shared HP pool across all players. <see cref="StartingHpMode"/> picks
+    /// average vs additive starting HP for the pool.
     /// </summary>
     SharedPool = 0,
 
     /// <summary>
-    /// Per-player HP — STS2 native multiplayer behaviour. SplitMaxHp, SplitHeal, and
-    /// SharedLoseHp are ignored.
+    /// Per-player HP — STS2 native multiplayer behaviour. SharedLoseHp is ignored.
     /// </summary>
     Vanilla = 1,
 

@@ -36,8 +36,6 @@ public class DebugOverlay : Control
     private Label? _sessionHpLbl;
     private Label? _sessionGoldLbl;
     private Label? _hpModeLbl;
-    private Label? _splitMaxHpLbl;
-    private Label? _splitHealLbl;
     private Label? _goldModeLbl;
 
     private static readonly Color ColorAccentYellow = new Color("efc851");
@@ -109,16 +107,11 @@ public class DebugOverlay : Control
 
         _hpModeLbl     = MakeLabel();
         _sessionHpLbl  = MakeLabel();
-        _splitMaxHpLbl = MakeLabel();
-        _splitHealLbl  = MakeLabel();
         _goldModeLbl   = MakeLabel();
         _sessionGoldLbl = MakeLabel();
 
         content.AddChild(_hpModeLbl);
-        // Session HP + split flags hang under HP Mode.
         content.AddChild(IndentLabel(_sessionHpLbl,  20));
-        content.AddChild(IndentLabel(_splitMaxHpLbl, 20));
-        content.AddChild(IndentLabel(_splitHealLbl,  20));
         content.AddChild(MakeSpacer(2));
         content.AddChild(_goldModeLbl);
         content.AddChild(IndentLabel(_sessionGoldLbl, 20));
@@ -208,17 +201,6 @@ public class DebugOverlay : Control
 
         string hpModeName = rs.HpMode == HpMode.Vanilla ? "Default" : rs.HpMode.ToString();
         Set(_hpModeLbl,     $"HP Mode: {hpModeName}",               ColorBody);
-
-        // Split flags only apply when an HP-sharing mode is active.
-        bool splitVisible = rs.HpMode != HpMode.Vanilla;
-        if (_splitMaxHpLbl?.GetParent() is Control splitMaxWrap) splitMaxWrap.Visible = splitVisible;
-        if (_splitHealLbl?.GetParent()  is Control splitHealWrap) splitHealWrap.Visible = splitVisible;
-        if (splitVisible)
-        {
-            Set(_splitMaxHpLbl, $"Split MaxHP: {rs.SplitMaxHp}",    ColorBody);
-            Set(_splitHealLbl,  $"Split Heal: {rs.SplitHeal}",      ColorBody);
-        }
-
         Set(_goldModeLbl,   $"Gold Mode: {rs.GoldMode}",            ColorBody);
 
         if (_bgPanel != null)

@@ -89,7 +89,7 @@ internal static class SettingsSyncHandler
     /// </summary>
     internal static void Handle(SoulLinkSettingsSyncMessage message, ulong senderId)
     {
-        SoulLinkLog.Debug($"[SyncDiag] Handle ENTRY senderId={senderId} localId={LocalContext.NetId} IsActive={SoulLinkSession.IsActive} payload(HpMode={(HpMode)message.HpMode} GoldMode={(GoldSharingMode)message.GoldMode} SplitMaxHp={message.SplitMaxHp})");
+        SoulLinkLog.Debug($"[SyncDiag] Handle ENTRY senderId={senderId} localId={LocalContext.NetId} IsActive={SoulLinkSession.IsActive} payload(HpMode={(HpMode)message.HpMode} GoldMode={(GoldSharingMode)message.GoldMode} StartingHpMode={(StartingHpMode)message.StartingHpMode})");
         // ShouldBroadcast=true means the host receives its own message. Host already owns
         // the authoritative settings — ignore the echo so we don't clobber state with stale
         // values on a re-entrant Refresh.
@@ -101,8 +101,6 @@ internal static class SettingsSyncHandler
 
         var settings = new SoulLinkRunSettings
         {
-            SplitMaxHp   = message.SplitMaxHp,
-            SplitHeal    = message.SplitHeal,
             GoldMode     = (GoldSharingMode)message.GoldMode,
             SharedLoseHp = message.SharedLoseHp,
             HpMode       = (HpMode)message.HpMode,
@@ -147,7 +145,7 @@ internal static class SettingsSyncHandler
             SoulLinkSession.PendingSyncedRunSettings = settings;
         }
 
-        SoulLinkLog.Debug($"Settings synced from host (IsActive={SoulLinkSession.IsActive}): SplitMaxHp={message.SplitMaxHp}, SplitHeal={message.SplitHeal}, GoldMode={(GoldSharingMode)message.GoldMode}, HpMode={(HpMode)message.HpMode}");
+        SoulLinkLog.Debug($"Settings synced from host (IsActive={SoulLinkSession.IsActive}): GoldMode={(GoldSharingMode)message.GoldMode}, HpMode={(HpMode)message.HpMode}, StartingHpMode={(StartingHpMode)message.StartingHpMode}");
 
         SoulLinkLog.Debug($"[SyncDiag] Handle: applied. PanelCurrent={(UI.SoulLinkSettingsPanel.Current != null)} -> Refresh()");
         // Refresh the settings panel on the client (read-only view).
@@ -461,15 +459,13 @@ public static class RunLaunchPatch
 
         // Only the host broadcasts settings. The host is the machine whose local player is slot 0.
         bool isHost = LocalContext.IsMe(runState.Players[0]);
-        SoulLinkLog.Debug($"IsHost={isHost} — SplitMaxHp={SoulLinkSession.ActiveRunSettings.SplitMaxHp}, GoldMode={SoulLinkSession.ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"IsHost={isHost} — GoldMode={SoulLinkSession.ActiveRunSettings.GoldMode}, HpMode={SoulLinkSession.ActiveRunSettings.HpMode}");
 
         if (isHost)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
             RunManager.Instance!.NetService.SendMessage(new SoulLinkSettingsSyncMessage
             {
-                SplitMaxHp   = rs.SplitMaxHp,
-                SplitHeal    = rs.SplitHeal,
                 GoldMode     = (int)rs.GoldMode,
                 SharedLoseHp = rs.SharedLoseHp,
                 HpMode       = (int)rs.HpMode,

@@ -8,18 +8,6 @@ namespace SoulLinkMod;
 /// </summary>
 public struct SoulLinkRunSettings
 {
-    /// <summary>
-    /// When true, out-of-combat MaxHP changes (gains AND losses) are divided by
-    /// the number of players before being applied to the shared pool.
-    /// </summary>
-    public bool SplitMaxHp;
-
-    /// <summary>
-    /// When true, out-of-combat CurrentHP heals are divided by the number of
-    /// players before being applied to the shared pool.
-    /// </summary>
-    public bool SplitHeal;
-
     /// <summary>How gold is managed between players. Independent of <see cref="HpMode"/>.</summary>
     public GoldSharingMode GoldMode;
 
@@ -46,8 +34,6 @@ public struct SoulLinkRunSettings
     /// <summary>Returns a SoulLinkRunSettings with the recommended defaults.</summary>
     public static SoulLinkRunSettings Default => new SoulLinkRunSettings
     {
-        SplitMaxHp   = true,
-        SplitHeal    = true,
         GoldMode     = GoldSharingMode.Default,
         SharedLoseHp = true,
         HpMode       = HpMode.SharedPool,

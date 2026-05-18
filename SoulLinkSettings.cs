@@ -10,7 +10,7 @@ namespace SoulLinkMod;
 /// Persistent user preferences for the Soul Link mod.
 /// Loaded once at startup, saved whenever a setting changes.
 ///
-/// Run-scoped settings (SplitMaxHp, SplitHeal, GoldMode) are the HOST's preferences
+/// Run-scoped settings (GoldMode, HpMode, StartingHpMode) are the HOST's preferences
 /// before a run starts. Once a run begins they are copied into
 /// SoulLinkSession.ActiveRunSettings and locked for the duration.
 ///
@@ -33,8 +33,6 @@ public class SoulLinkSettings
 
     // ── Run settings (host-owned, broadcast to clients at run start) ──────────
 
-    public bool SplitMaxHp   { get; set; } = false;
-    public bool SplitHeal    { get; set; } = false;
     public GoldSharingMode GoldMode { get; set; } = GoldSharingMode.Default;
     /// <summary>
     /// When true, "lose HP" relics and cards (CentennialPuzzle, SelfFormingClay,
@@ -56,8 +54,6 @@ public class SoulLinkSettings
     /// <summary>Converts run-scoped fields into a SoulLinkRunSettings struct (panel fields are local-only).</summary>
     public SoulLinkRunSettings ToRunSettings() => new SoulLinkRunSettings
     {
-        SplitMaxHp   = SplitMaxHp,
-        SplitHeal    = SplitHeal,
         GoldMode     = GoldMode,
         SharedLoseHp = SharedLoseHp,
         HpMode       = HpMode,

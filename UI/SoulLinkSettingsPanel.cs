@@ -40,8 +40,6 @@ public class SoulLinkSettingsPanel : Control
 
     // Run setting controls
     private OptionButton? _hpModeOption;
-    private CheckBox?     _cbSplitMaxHp;
-    private CheckBox?     _cbSplitHeal;
     private CheckBox?     _cbAdditiveStartingHp;
     private OptionButton? _goldModeOption;
     private CheckBox?     _cbSharedLoseHp;
@@ -53,8 +51,6 @@ public class SoulLinkSettingsPanel : Control
 
     // Descriptor labels for run settings (need to gray out when disabled)
     private Label? _descHpMode;
-    private RichTextLabel? _descSplitMaxHp;
-    private RichTextLabel? _descSplitHeal;
     private RichTextLabel? _descAdditiveStartingHp;
     private Label? _descGoldMode;  // dynamic — text changes with selection
 
@@ -181,13 +177,6 @@ public class SoulLinkSettingsPanel : Control
         _descHpMode = MakeDescriptor(HpModeDescriptor(SoulLinkSettings.Instance.HpMode));
         vbox.AddChild(WrapDescriptor(_descHpMode));
 
-        _cbSplitMaxHp = MakeCheckBox("Split MaxHP changes by players");
-        _cbSplitMaxHp.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitMaxHp={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitMaxHp = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
-        vbox.AddChild(Indent(_cbSplitMaxHp));
-        _descSplitMaxHp = MakeRichDescriptor(
-            $"eg [color=#{ColHpGreen.ToHtml(false)}]+10 MaxHP[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5 MaxHP[/color] to the MaxHP pool (for 2 players)");
-        vbox.AddChild(WrapDescriptorControl(_descSplitMaxHp));
-
         _cbAdditiveStartingHp = MakeCheckBox("Additive starting HP");
         _cbAdditiveStartingHp.Toggled += on =>
         {
@@ -201,13 +190,6 @@ public class SoulLinkSettingsPanel : Control
         _descAdditiveStartingHp = MakeRichDescriptor(
             $"Pool starts at [color=#{ColHpGreen.ToHtml(false)}]sum[/color] of all players' starting HP instead of [color=#{ColHpGreen.ToHtml(false)}]average[/color] (easier)");
         vbox.AddChild(WrapDescriptorControl(_descAdditiveStartingHp));
-
-        _cbSplitHeal = MakeCheckBox("Split healing by players");
-        _cbSplitHeal.Toggled += on => { if (_refreshing) return; SoulLinkLog.Debug($"[SyncDiag] Toggled SplitHeal={on} isClient={_isClientMode}"); SoulLinkSettings.Instance.SplitHeal = on; SoulLinkSettings.Save(); if (!_isClientMode) SoulLinkSession.TrySendSettingsSync(); };
-        vbox.AddChild(Indent(_cbSplitHeal));
-        _descSplitHeal = MakeRichDescriptor(
-            $"eg [color=#{ColHpGreen.ToHtml(false)}]+10[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] -> [color=#{ColHpGreen.ToHtml(false)}]+5[/color] [color=#{ColHpGreen.ToHtml(false)}]Healing[/color] to the shared HP pool (for 2 players)");
-        vbox.AddChild(WrapDescriptorControl(_descSplitHeal));
 
         vbox.AddChild(MakeSpacer(12));
         vbox.AddChild(MakeLabel("  GOLD MODE (host only):", ColSection, 16));
@@ -276,15 +258,13 @@ public class SoulLinkSettingsPanel : Control
         // - Client during active run: show locked ActiveRunSettings from host.
         // - Client pre-run: show host's most-recent sync if we have one, else fall back to local.
         // - Host: show local SoulLinkSettings.
-        bool splitMaxHp, splitHeal, sharedLoseHp;
+        bool sharedLoseHp;
         GoldSharingMode goldMode;
         HpMode hpMode;
         StartingHpMode startingHpMode;
         if (_isClientMode && runActive)
         {
             var rs = SoulLinkSession.ActiveRunSettings;
-            splitMaxHp   = rs.SplitMaxHp;
-            splitHeal    = rs.SplitHeal;
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
             hpMode       = rs.HpMode;
@@ -293,8 +273,6 @@ public class SoulLinkSettingsPanel : Control
         else if (_isClientMode && SoulLinkSession.PendingSyncedRunSettings.HasValue)
         {
             var rs = SoulLinkSession.PendingSyncedRunSettings.Value;
-            splitMaxHp   = rs.SplitMaxHp;
-            splitHeal    = rs.SplitHeal;
             goldMode     = rs.GoldMode;
             sharedLoseHp = rs.SharedLoseHp;
             hpMode       = rs.HpMode;
@@ -303,8 +281,6 @@ public class SoulLinkSettingsPanel : Control
         else
         {
             var s = SoulLinkSettings.Instance;
-            splitMaxHp   = s.SplitMaxHp;
-            splitHeal    = s.SplitHeal;
             goldMode     = s.GoldMode;
             sharedLoseHp = s.SharedLoseHp;
             hpMode       = s.HpMode;
@@ -336,15 +312,9 @@ public class SoulLinkSettingsPanel : Control
 
         // Vanilla HpMode ignores all HP-axis settings — hide them entirely (host + client).
         bool hpAxisVisible = hpMode != HpMode.Vanilla;
-        SetRowVisible(_cbSplitMaxHp, _descSplitMaxHp, hpAxisVisible);
-        SetRowVisible(_cbSplitHeal,  _descSplitHeal,  hpAxisVisible);
         SetRowVisible(_cbAdditiveStartingHp, _descAdditiveStartingHp, hpAxisVisible);
         SetRowVisible(_cbSharedLoseHp, null,          hpAxisVisible);
 
-        SetCheckBox(_cbSplitMaxHp, splitMaxHp, hpAxisEditable, lockedTint);
-        SetDescriptor(_descSplitMaxHp, hpAxisEditable, lockedTint);
-        SetCheckBox(_cbSplitHeal,  splitHeal,  hpAxisEditable, lockedTint);
-        SetDescriptor(_descSplitHeal, hpAxisEditable, lockedTint);
         SetCheckBox(_cbAdditiveStartingHp, startingHpMode == StartingHpMode.Additive, hpAxisEditable, lockedTint);
         SetDescriptor(_descAdditiveStartingHp, hpAxisEditable, lockedTint);
         SetCheckBox(_cbSharedLoseHp,  sharedLoseHp, hpAxisEditable, lockedTint);

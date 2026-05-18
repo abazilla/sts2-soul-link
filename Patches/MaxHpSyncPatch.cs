@@ -59,10 +59,10 @@ public static class MaxHpSyncPatch
         // No init-phase MaxHp branch: vanilla character/ascension setup never writes MaxHp
         // through the public setter (it uses reflection on the backing field), so any
         // MaxHp setter call we intercept during init is already a real player-visible
-        // event (Neow downside, etc.) that must go through ApplyMaxHpDelta for proper
-        // SplitMaxHp scaling and delta-correct logging. Falling into the canonical-pool
-        // path also avoids the bug where comparing `value` against the (lazy-grown)
-        // canonical pool produced wrong deltas while creature MaxHp was higher than pool.
+        // event (Neow downside, etc.) that must go through ApplyMaxHpDelta for
+        // delta-correct logging. Falling into the canonical-pool path also avoids the
+        // bug where comparing `value` against the (lazy-grown) canonical pool produced
+        // wrong deltas while creature MaxHp was higher than pool.
 
         if (inCombat && !SoulLinkSession.IsInitPhaseComplete)
             SoulLinkSession.MarkInitPhaseComplete();
@@ -93,7 +93,7 @@ public static class MaxHpSyncPatch
             //
             // Passing through writes the raw new value to this creature; the subsequent
             // ExecuteAction will overwrite all creatures with the canonical pool value
-            // (idempotent for shared pool; brief skew under SplitMaxHp until apply).
+            // (idempotent for shared pool).
             //
             // Side effect — LeesWaffle double-heals: it calls GainMaxHp (now heals via
             // pass-through) then explicitly `Heal(creature, MaxHp - CurrentHp)`. The

@@ -13,8 +13,6 @@ namespace SoulLinkMod;
 /// </summary>
 public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
 {
-    public bool SplitMaxHp;
-    public bool SplitHeal;
     /// <summary>Cast of <see cref="GoldSharingMode"/> — serialized as int for wire format.</summary>
     public int GoldMode;
     public bool SharedLoseHp;
@@ -31,8 +29,6 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
 
     public void Serialize(PacketWriter writer)
     {
-        writer.WriteBool(SplitMaxHp);
-        writer.WriteBool(SplitHeal);
         writer.WriteInt(GoldMode);
         writer.WriteBool(SharedLoseHp);
         writer.WriteInt(HpMode);
@@ -41,8 +37,6 @@ public struct SoulLinkSettingsSyncMessage : INetMessage, IPacketSerializable
 
     public void Deserialize(PacketReader reader)
     {
-        SplitMaxHp   = reader.ReadBool();
-        SplitHeal    = reader.ReadBool();
         GoldMode     = reader.ReadInt();
         SharedLoseHp = reader.ReadBool();
         // HpMode added after initial release; default to SharedPool (0) if the stream ends early.

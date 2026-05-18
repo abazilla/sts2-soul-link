@@ -250,7 +250,7 @@ public static class SoulLinkSession
 
         // Always re-save so re-hosting from this save will see the correct settings.
         SoulLinkSettings.SaveRunSettings(ActiveRunSettings);
-        SoulLinkLog.Debug($"Run settings: HpMode={ActiveRunSettings.HpMode}, StartingHpMode={ActiveRunSettings.StartingHpMode}, SplitMaxHp={ActiveRunSettings.SplitMaxHp}, SplitHeal={ActiveRunSettings.SplitHeal}, GoldMode={ActiveRunSettings.GoldMode}");
+        SoulLinkLog.Debug($"Run settings: HpMode={ActiveRunSettings.HpMode}, StartingHpMode={ActiveRunSettings.StartingHpMode}, GoldMode={ActiveRunSettings.GoldMode}");
 
         bool additive = ActiveRunSettings.StartingHpMode == StartingHpMode.Additive;
         int sharedMaxHp;
@@ -373,7 +373,10 @@ public static class SoulLinkSession
     /// Called from HpSyncPatch when any player's CurrentHp is being written.
     /// Updates the canonical pool, logs the entry, and writes back to all players.
     /// Returns the value that should be written to the triggering player's HP
-    /// (the canonical value, possibly scaled for out-of-combat heals).
+    /// (the canonical value).
+    ///
+    /// All heals apply at full nominal value — split/divided heal scaling has been
+    /// removed (the additive starting-HP mode covers the difficulty axis it used to).
     /// </summary>
     public static int ApplyHpDelta(int rawDelta, bool inCombat, int playerCount, int playerSlot, string? source = null)
     {
@@ -383,8 +386,7 @@ public static class SoulLinkSession
         int pendingClamp = _pendingHpClamp;
         _pendingHpClamp = 0;  // always consume
 
-        int unclampedHeal = PendingUnclampedHeal;
-        PendingUnclampedHeal = 0;  // always consume
+        PendingUnclampedHeal = 0;  // always consume even though we no longer scale
 
         // This is the follow-up CurrentHp write caused by MaxHp dropping below CurrentHp.
         // ApplyMaxHpDelta already clamped CurrentHp — nothing to do here, and nothing to log.
@@ -394,55 +396,15 @@ public static class SoulLinkSession
         int delta = rawDelta;
 
         // The first time a combat HP change fires, we know initialization is complete.
-        // From this point on, campfire/event heals fire once per player and must be scaled.
         if (inCombat) _initPhaseComplete = true;
 
-        // Per-peer deterministic heal (e.g. BurningBlood): fires playerCount times,
-        // once per peer. Scale each occurrence by 1/playerCount so the pool receives
-        // the nominal heal value, not playerCount × it. Applies in or out of combat.
-        if (PerPeerDeterministicHeal
-            && delta > 0
-            && playerCount > 1
-            && ActiveRunSettings.SplitHeal)
+        // Heal-to-full follow-up after MaxHP gain (e.g. Lee's Waffle).
+        // Per-player vanilla heals to its own MaxHp; in SharedPool the intent is
+        // "fill the pool", so heal the pool to MaxHp regardless of the per-player
+        // delta the game computed.
+        if (delta > 0 && !inCombat && pendingHeal > 0 && rawDelta > pendingHeal)
         {
-            delta = Math.Max(1, (int)Math.Round((double)rawDelta / playerCount, MidpointRounding.AwayFromZero));
-        }
-        else if (delta > 0 && !inCombat)
-        {
-            if (pendingHeal > 0 && rawDelta == pendingHeal)
-            {
-                // This heal is the follow-up to a MaxHP gain and equals the MaxHp delta
-                // exactly — the game already computed it from our scaled MaxHp value, so
-                // don't scale it again.
-                delta = pendingHeal;
-            }
-            else if (pendingHeal > 0 && rawDelta > pendingHeal)
-            {
-                // Heal-to-full follow-up after MaxHP gain (e.g. Lee's Waffle).
-                // Per-player vanilla heals to its own MaxHp; in SharedPool the
-                // intent is "fill the pool", so heal the pool to MaxHp regardless
-                // of the per-player delta the game computed.
-                delta = MaxHp - CurrentHp;
-            }
-            else if (_initPhaseComplete && playerCount > 1 && ActiveRunSettings.SplitHeal)
-            {
-                // Normal out-of-combat heal (campfire, event, etc.): scale by 1/playerCount
-                // so each player's heal contributes a proportional share to the shared pool.
-                int baseForScaling = unclampedHeal > 0 ? unclampedHeal : rawDelta;
-                delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
-            }
-            // If !_initPhaseComplete: Neow/initialization heal — apply in full.
-        }
-        else if (delta > 0 && inCombat
-                 && _initPhaseComplete
-                 && playerCount > 1
-                 && ActiveRunSettings.SplitHeal)
-        {
-            // In-combat heal (Blood Potion, NOT_YET, etc.): fires once per peer on the
-            // triggering player's creature. Scale by 1/playerCount so all peers converge
-            // on the same scaled canonical pool gain.
-            int baseForScaling = unclampedHeal > 0 ? unclampedHeal : rawDelta;
-            delta = Math.Max(1, (int)Math.Round((double)baseForScaling / playerCount, MidpointRounding.AwayFromZero));
+            delta = MaxHp - CurrentHp;
         }
 
         CurrentHp = Math.Clamp(CurrentHp + delta, 0, MaxHp);
@@ -453,8 +415,8 @@ public static class SoulLinkSession
 
     /// <summary>
     /// Revive heal: overwrites the canonical pool with the given absolute value
-    /// (clamped to MaxHp) and emits a log entry. Bypasses SplitHeal scaling — this
-    /// represents a single consume event (Fairy/Lizard), not a per-peer heal.
+    /// (clamped to MaxHp) and emits a log entry. Represents a single consume event
+    /// (Fairy/Lizard), not a per-peer heal.
     /// </summary>
     public static void ReviveCanonicalHp(int healed, int playerSlot, string? source)
     {
@@ -470,33 +432,20 @@ public static class SoulLinkSession
     /// </summary>
     public static void ApplyMaxHpDelta(int delta, bool inCombat, int playerCount, int playerSlot, string? source = null)
     {
-        int scaledDelta = delta;
-
-        // Scale out-of-combat MaxHP changes when the SplitMaxHp toggle is on.
-        // Applies to BOTH gains and losses.
-        if (!inCombat && playerCount > 1 && ActiveRunSettings.SplitMaxHp)
-        {
-            scaledDelta = delta < 0
-                ? -Math.Max(1, (int)Math.Round((double)-delta / playerCount, MidpointRounding.AwayFromZero))
-                : Math.Max(1, (int)Math.Round((double)delta  / playerCount, MidpointRounding.AwayFromZero));
-        }
-
+        // MaxHP changes apply at full nominal value — split-by-player scaling removed.
         int oldCurrentHp = CurrentHp;
-        MaxHp = Math.Max(1, MaxHp + scaledDelta);
+        MaxHp = Math.Max(1, MaxHp + delta);
         CurrentHp = Math.Min(CurrentHp, MaxHp);
 
-        if (scaledDelta > 0)
-            _pendingMaxHpHeal = scaledDelta;
+        if (delta > 0)
+            _pendingMaxHpHeal = delta;
 
         // If CurrentHp was clamped down, store the clamp amount so ApplyHpDelta can
         // recognise and silently absorb the follow-up CurrentHp setter the game fires.
         if (CurrentHp < oldCurrentHp)
             _pendingHpClamp = oldCurrentHp - CurrentHp;
 
-        // Log the scaled delta — what the shared pool actually lost/gained. Under
-        // SplitMaxHp, a Neow card saying "-12 Max HP" only drops the shared pool by
-        // -12/N, so the log reflects the post-scaling effect each player experienced.
-        AddEntry(new LogEntry(LogEntryType.Health, playerSlot, 0, scaledDelta, source));
+        AddEntry(new LogEntry(LogEntryType.Health, playerSlot, 0, delta, source));
     }
 
     // ── Apply Gold delta ──────────────────────────────────────────────────────
@@ -671,8 +620,6 @@ public static class SoulLinkSession
             var s = SoulLinkSettings.Instance;
             var msg = new SoulLinkSettingsSyncMessage
             {
-                SplitMaxHp   = s.SplitMaxHp,
-                SplitHeal    = s.SplitHeal,
                 GoldMode     = (int)s.GoldMode,
                 SharedLoseHp = s.SharedLoseHp,
                 HpMode       = (int)s.HpMode,
@@ -682,14 +629,14 @@ public static class SoulLinkSession
             var net = RunManager.Instance?.NetService;
             if (net != null && net.IsConnected)
             {
-                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via run net#{net.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via run net#{net.GetHashCode()} GoldMode={s.GoldMode} HpMode={s.HpMode} StartingHpMode={s.StartingHpMode} SharedLoseHp={s.SharedLoseHp}");
                 net.SendMessage(msg);
                 return;
             }
 
             if (Patches.LobbyNetCapture.IsAvailable)
             {
-                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via lobby net#{Patches.LobbyNetCapture.Service!.GetHashCode()} SplitMaxHp={s.SplitMaxHp} SplitHeal={s.SplitHeal} GoldMode={s.GoldMode} HpMode={s.HpMode} SharedLoseHp={s.SharedLoseHp}");
+                SoulLinkLog.Debug($"[SyncDiag] TrySendSettingsSync: SENDING via lobby net#{Patches.LobbyNetCapture.Service!.GetHashCode()} GoldMode={s.GoldMode} HpMode={s.HpMode} StartingHpMode={s.StartingHpMode} SharedLoseHp={s.SharedLoseHp}");
                 Patches.LobbyNetCapture.TrySend(msg);
                 return;
             }
