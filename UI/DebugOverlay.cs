@@ -3,6 +3,7 @@ using Godot;
 using MegaCrit.Sts2.Core.Runs;
 
 using SoulLinkMod;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod.UI;
 
@@ -91,7 +92,7 @@ public class DebugOverlay : Control
         AddChild(vbox);
 
         // Header button — borderless, looks like a plain clickable label.
-        _toggleButton = new Button { Text = $"Soul Link Debug (v{SoulLinkMod.Version}) v" };
+        _toggleButton = new Button { Text = Loc.Tf("debug.header_expanded", SoulLinkMod.Version) };
         _toggleButton.Alignment = HorizontalAlignment.Left;
         _toggleButton.Pressed += OnToggle;
         ApplyHeaderButtonStyle(_toggleButton);
@@ -191,7 +192,7 @@ public class DebugOverlay : Control
         bool showSessionHp = rs.HpMode != HpMode.Vanilla;
         if (_sessionHpLbl?.GetParent() is Control sessHpWrap) sessHpWrap.Visible = showSessionHp;
         if (showSessionHp)
-            Set(_sessionHpLbl, $"Session HP:  {SoulLinkSession.CurrentHp} / {SoulLinkSession.MaxHp}", ColorHp);
+            Set(_sessionHpLbl, Loc.Tf("debug.session_hp", SoulLinkSession.CurrentHp, SoulLinkSession.MaxHp), ColorHp);
 
         bool showSessionGold = rs.GoldMode != GoldSharingMode.Default;
         if (_sessionGoldLbl?.GetParent() is Control sessGoldWrap) sessGoldWrap.Visible = showSessionGold;
@@ -199,15 +200,17 @@ public class DebugOverlay : Control
         {
             string goldLine = rs.GoldMode switch
             {
-                GoldSharingMode.SplitByPlayer => $"Gold P0:{SoulLinkSession.GetPlayerGold(0)}  P1:{SoulLinkSession.GetPlayerGold(1)}",
-                GoldSharingMode.SharedPool    => $"Session Gold:  {SoulLinkSession.Gold}",
+                GoldSharingMode.SplitByPlayer => Loc.Tf("debug.gold_per_player", SoulLinkSession.GetPlayerGold(0), SoulLinkSession.GetPlayerGold(1)),
+                GoldSharingMode.SharedPool    => Loc.Tf("debug.session_gold", SoulLinkSession.Gold),
                 _                             => "",
             };
             Set(_sessionGoldLbl, goldLine, ColorGold);
         }
 
-        string hpModeName = rs.HpMode == HpMode.Vanilla ? "Default" : rs.HpMode.ToString();
-        Set(_hpModeLbl,     $"HP Mode: {hpModeName}",               ColorBody);
+        // Mode names: "Default" is translated; other enum members render their raw name
+        // (English) for now — they're internal labels rarely seen in production debug.
+        string hpModeName = rs.HpMode == HpMode.Vanilla ? Loc.T("debug.hp_mode_default") : rs.HpMode.ToString();
+        Set(_hpModeLbl,     Loc.Tf("debug.hp_mode", hpModeName), ColorBody);
 
         // Split flags only apply when an HP-sharing mode is active.
         bool splitVisible = rs.HpMode != HpMode.Vanilla;
@@ -215,17 +218,17 @@ public class DebugOverlay : Control
         if (_splitHealLbl?.GetParent()  is Control splitHealWrap) splitHealWrap.Visible = splitVisible;
         if (splitVisible)
         {
-            Set(_splitMaxHpLbl, $"Split MaxHP: {rs.SplitMaxHp}",    ColorBody);
-            Set(_splitHealLbl,  $"Split Heal: {rs.SplitHeal}",      ColorBody);
+            Set(_splitMaxHpLbl, Loc.Tf("debug.split_max_hp", rs.SplitMaxHp), ColorBody);
+            Set(_splitHealLbl,  Loc.Tf("debug.split_heal",   rs.SplitHeal),  ColorBody);
         }
 
-        Set(_goldModeLbl,   $"Gold Mode: {rs.GoldMode}",            ColorBody);
+        Set(_goldModeLbl,   Loc.Tf("debug.gold_mode", rs.GoldMode), ColorBody);
 
         if (_bgPanel != null)
             _bgPanel.Visible = _expanded;
 
         if (_toggleButton != null)
-            _toggleButton.Text = $"Soul Link Debug (v{SoulLinkMod.Version}) {(_expanded ? "v" : ">")}";
+            _toggleButton.Text = Loc.Tf(_expanded ? "debug.header_expanded" : "debug.header_collapsed", SoulLinkMod.Version);
     }
 
     private static void Set(Label? lbl, string text, Color color)

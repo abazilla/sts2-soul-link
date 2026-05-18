@@ -1,0 +1,86 @@
+{
+  "_meta": {
+    "_comment": "Japanese (jpn) translations for Soul Link. Terms follow Slay the Spire JP conventions: HP/最大HP, ブロック (Block), ゴールド (Gold), レリック (Relic), ターン (Turn), ダメージ (Damage), 回復 (Heal), プレイヤー (Player), ホスト (Host), デフォルト (Default/vanilla). Card/relic names use the in-game JP names where they exist. Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "ソウルリンク設定",
+
+    "hp_mode_label": "  HPモード（ホストのみ）：",
+    "hp_mode": {
+      "shared_pool": "HP共有プール",
+      "vanilla": "デフォルト",
+      "shared_block_shared_pool": "HP・ブロック共有プール"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "全プレイヤーでHPプールを共有",
+      "vanilla": "デフォルト、未改変の動作",
+      "coming_soon": "近日公開"
+    },
+
+    "gold_mode_label": "  ゴールドモード（ホストのみ）：",
+    "gold_mode": {
+      "shared_pool": "ゴールド共有プール",
+      "vanilla": "デフォルト",
+      "split": "共有プール、プレイヤー間で均等分配"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "全プレイヤーでゴールドを共有",
+      "split": "獲得ゴールドはプレイヤー間で均等に分配、消費は個別",
+      "vanilla": "デフォルト、未改変の動作"
+    },
+
+    "split_max_hp": "最大HP変動をプレイヤー間で分割",
+    "split_max_hp_desc": "例：[color=#{0}]+10 最大HP[/color] → [color=#{0}]+5 最大HP[/color] をHPプールへ（2人時）",
+
+    "split_heal": "回復をプレイヤー間で分割",
+    "split_heal_desc": "例：[color=#{0}]+10[/color] [color=#{0}]回復[/color] → [color=#{0}]+5[/color] [color=#{0}]回復[/color] を共有HPプールへ（2人時）",
+
+    "panels_label": "  パネル（ローカル）：",
+    "show_combat_log": "ソウルリンクフィードを表示",
+    "show_combat_log_desc": "最近のイベントを表示",
+    "show_debug_overlay": "デバッグオーバーレイを表示",
+    "show_debug_overlay_desc": "開発者情報"
+  },
+
+  "tip": {
+    "title": "⊞ ソウルリンク",
+    "centennial_puzzle":  "仲間がブロックされていないダメージを受けた時にも発動。",
+    "self_forming_clay":  "仲間がブロックされていないダメージを受けた時にも発動。",
+    "demon_tongue":       "あなたのターン中に仲間がブロックされていないダメージを受けた時にもHPを回復。",
+    "lizard_tail":        "仲間の死亡も防ぐ。",
+    "emotion_chip":       "前のターンに仲間が受けたダメージでも発動。",
+    "spite":              "仲間がダメージを受けた時にも発動。",
+    "tear_asunder":       "仲間がダメージを受けた時にも発動。",
+    "fairy_in_a_bottle":  "仲間の死亡も回避する。"
+  },
+
+  "stats": {
+    "header_expanded": "ラン統計 v",
+    "header_collapsed": "ラン統計 >",
+    "damage_taken": "受けたダメージ",
+    "healing_gained": "回復したHP",
+    "gold_earned": "獲得ゴールド",
+    "gold_spent": "消費ゴールド",
+    "row_format": "{0}：{1}"
+  },
+
+  "feed": {
+    "header_expanded": "ソウルリンクフィード v",
+    "header_collapsed": "ソウルリンクフィード >",
+    "no_events": "（イベントなし）"
+  },
+
+  "debug": {
+    "header_expanded": "ソウルリンクデバッグ (v{0}) v",
+    "header_collapsed": "ソウルリンクデバッグ (v{0}) >",
+    "hp_mode": "HPモード：{0}",
+    "hp_mode_default": "デフォルト",
+    "session_hp": "セッションHP：{0} / {1}",
+    "split_max_hp": "最大HP分割：{0}",
+    "split_heal": "回復分割：{0}",
+    "gold_mode": "ゴールドモード：{0}",
+    "session_gold": "セッションゴールド：{0}",
+    "gold_per_player": "ゴールド P0：{0}  P1：{1}"
+  }
+}

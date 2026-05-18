@@ -1,0 +1,86 @@
+{
+  "_meta": {
+    "_comment": "Simplified Chinese (zhs) translations for Soul Link. Terms follow Slay the Spire CN conventions: 生命/最大生命 for HP, 格挡 for Block, 金币 for Gold, 遗物 for Relic, 原版 for vanilla/unmodded, 房主 for host. Placeholders {0}/{1} and BBCode color tags must be preserved verbatim."
+  },
+
+  "settings": {
+    "header": "灵魂链接设置",
+
+    "hp_mode_label": "  生命模式（仅房主）：",
+    "hp_mode": {
+      "shared_pool": "共享生命池",
+      "vanilla": "默认",
+      "shared_block_shared_pool": "共享生命与格挡池"
+    },
+    "hp_mode_desc": {
+      "shared_pool": "所有玩家共享同一生命池",
+      "vanilla": "默认，原版行为",
+      "coming_soon": "敬请期待"
+    },
+
+    "gold_mode_label": "  金币模式（仅房主）：",
+    "gold_mode": {
+      "shared_pool": "共享金币池",
+      "vanilla": "默认",
+      "split": "共享池，按玩家平分金币"
+    },
+    "gold_mode_desc": {
+      "shared_pool": "所有玩家共享同一金币池",
+      "split": "获得的金币在玩家间平分，但各自花费",
+      "vanilla": "默认，原版行为"
+    },
+
+    "split_max_hp": "最大生命变化按玩家平分",
+    "split_max_hp_desc": "例如 [color=#{0}]+10 最大生命[/color] → [color=#{0}]+5 最大生命[/color] 进入生命池（2 人时）",
+
+    "split_heal": "治疗按玩家平分",
+    "split_heal_desc": "例如 [color=#{0}]+10[/color] [color=#{0}]治疗[/color] → [color=#{0}]+5[/color] [color=#{0}]治疗[/color] 进入共享生命池（2 人时）",
+
+    "panels_label": "  面板（本地）：",
+    "show_combat_log": "显示灵魂链接战报",
+    "show_combat_log_desc": "显示最近的事件",
+    "show_debug_overlay": "显示调试信息",
+    "show_debug_overlay_desc": "开发者信息"
+  },
+
+  "tip": {
+    "title": "⊞ 灵魂链接",
+    "centennial_puzzle":  "队友受到未格挡伤害时也会触发。",
+    "self_forming_clay":  "队友受到未格挡伤害时也会触发。",
+    "demon_tongue":       "你的回合内队友受到未格挡伤害时也会回复生命。",
+    "lizard_tail":        "也可防止队友死亡。",
+    "emotion_chip":       "队友上一回合受到的伤害也会触发。",
+    "spite":              "队友受到伤害时也会触发。",
+    "tear_asunder":       "队友受到伤害时也会触发。",
+    "fairy_in_a_bottle":  "队友濒死时也会触发，避免其死亡。"
+  },
+
+  "stats": {
+    "header_expanded": "本局统计 v",
+    "header_collapsed": "本局统计 >",
+    "damage_taken": "累计承受伤害",
+    "healing_gained": "累计回复生命",
+    "gold_earned": "累计获得金币",
+    "gold_spent": "累计花费金币",
+    "row_format": "{0}：{1}"
+  },
+
+  "feed": {
+    "header_expanded": "灵魂链接战报 v",
+    "header_collapsed": "灵魂链接战报 >",
+    "no_events": "（暂无事件）"
+  },
+
+  "debug": {
+    "header_expanded": "灵魂链接调试 (v{0}) v",
+    "header_collapsed": "灵魂链接调试 (v{0}) >",
+    "hp_mode": "生命模式：{0}",
+    "hp_mode_default": "默认",
+    "session_hp": "本局生命：{0} / {1}",
+    "split_max_hp": "最大生命平分：{0}",
+    "split_heal": "治疗平分：{0}",
+    "gold_mode": "金币模式：{0}",
+    "session_gold": "本局金币：{0}",
+    "gold_per_player": "金币 P0：{0}  P1：{1}"
+  }
+}

@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
 
 using SoulLinkMod;
+using SoulLinkMod.Localization;
 
 namespace SoulLinkMod.UI;
 
@@ -44,6 +45,7 @@ public class CombatLogPanel : Control
     private static readonly Color ColorAccentYellow = new Color("efc851");
 
     private RichTextLabel? _label;
+    private MegaCrit.Sts2.Core.Localization.LocManager.LocaleChangeCallback? _localeChangeCb;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -68,7 +70,7 @@ public class CombatLogPanel : Control
             AddChild(vbox);
 
             // Header toggle button — mirrors RunStatsPanel's borderless button style.
-            _toggleButton = new Button { Text = "Soul Link Feed v" };
+            _toggleButton = new Button { Text = Loc.T("feed.header_expanded") };
             _toggleButton.Pressed += OnToggle;
             ApplyHeaderButtonStyle(_toggleButton);
             ApplyHeaderTextStyle(_toggleButton);
@@ -94,11 +96,26 @@ public class CombatLogPanel : Control
 
             SoulLinkLog.Debug($"CombatLogPanel initialized at OffsetLeft={OffsetLeft} OffsetTop={OffsetTop}");
             Refresh();
+
+            // DoRefresh rebuilds the toggle label + body from Loc.T, so a plain
+            // Refresh() picks up locale changes — no subtree rebuild needed.
+            _localeChangeCb = Refresh;
+            LocaleBus.Subscribe(_localeChangeCb);
         }
         catch (Exception ex)
         {
             SoulLinkLog.Error($"CombatLogPanel.Initialize crashed: {ex}");
         }
+    }
+
+    public override void _ExitTree()
+    {
+        if (_localeChangeCb != null)
+        {
+            LocaleBus.Unsubscribe(_localeChangeCb);
+            _localeChangeCb = null;
+        }
+        if (Current == this) Current = null;
     }
 
     public void Refresh()
@@ -120,7 +137,7 @@ public class CombatLogPanel : Control
         Visible = visible;
         if (!visible) return;
 
-        _toggleButton.Text = _expanded ? "Soul Link Feed v" : "Soul Link Feed >";
+        _toggleButton.Text = Loc.T(_expanded ? "feed.header_expanded" : "feed.header_collapsed");
         _label.Visible = _expanded;
 
         if (!_expanded) return;
@@ -137,7 +154,7 @@ public class CombatLogPanel : Control
         var entries = SoulLinkSession.Log.Take(MaxVisible).ToList();
         if (entries.Count == 0)
         {
-            sb.Append($"[right][color=#{HexBlocked}](no events yet)[/color][/right]\n");
+            sb.Append($"[right][color=#{HexBlocked}]{Loc.T("feed.no_events")}[/color][/right]\n");
             _label.Text = sb.ToString();
             return;
         }
