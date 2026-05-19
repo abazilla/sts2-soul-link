@@ -246,23 +246,23 @@ public class CombatLogPanel : Control
 
         if (d < 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.health.damage_from") : Loc.T("feed.health.damage"),
+                hasSrc ? Loc.TRaw("feed.health.damage_from") : Loc.TRaw("feed.health.damage"),
                 (name, nameHex), (Amt(-d, "damage"), HexDamage), (src, HexEvent));
         if (d > 0 && md > 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.health.heal_and_max_via") : Loc.T("feed.health.heal_and_max"),
+                hasSrc ? Loc.TRaw("feed.health.heal_and_max_via") : Loc.TRaw("feed.health.heal_and_max"),
                 (name, nameHex), (Amt(d, "hp"), HexHeal), (Amt(md, "max_hp"), HexHeal), (src, HexEvent));
         if (d > 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.health.heal_via") : Loc.T("feed.health.heal"),
+                hasSrc ? Loc.TRaw("feed.health.heal_via") : Loc.TRaw("feed.health.heal"),
                 (name, nameHex), (Amt(d, "health"), HexHeal), (src, HexEvent));
         if (md > 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.health.max_gain_via") : Loc.T("feed.health.max_gain"),
+                hasSrc ? Loc.TRaw("feed.health.max_gain_via") : Loc.TRaw("feed.health.max_gain"),
                 (name, nameHex), (Amt(md, "max_hp"), HexHeal), (src, HexEvent));
         if (md < 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.health.max_loss_via") : Loc.T("feed.health.max_loss"),
+                hasSrc ? Loc.TRaw("feed.health.max_loss_via") : Loc.TRaw("feed.health.max_loss"),
                 (name, nameHex), (Amt(-md, "max_hp"), HexDamage), (src, HexEvent));
 
         return new List<(string, string)> { (name, nameHex) };
@@ -274,14 +274,14 @@ public class CombatLogPanel : Control
         string src = hasSrc ? ResolveSource(e.Source) : Loc.T("feed.gold.default_source");
 
         if (e.Blocked)
-            return RenderTemplate(Loc.T("feed.gold.blocked"),
+            return RenderTemplate(Loc.TRaw("feed.gold.blocked"),
                 (name, nameHex), (Amt(e.Delta, "gold"), HexBlocked), (src, HexBlocked));
         if (e.Delta > 0)
             return RenderTemplate(
-                hasSrc ? Loc.T("feed.gold.gain_from") : Loc.T("feed.gold.gain"),
+                hasSrc ? Loc.TRaw("feed.gold.gain_from") : Loc.TRaw("feed.gold.gain"),
                 (name, nameHex), (Amt(e.Delta, "gold"), HexGoldGain), (src, HexEvent));
         return RenderTemplate(
-            hasSrc ? Loc.T("feed.gold.spend_via") : Loc.T("feed.gold.spend"),
+            hasSrc ? Loc.TRaw("feed.gold.spend_via") : Loc.TRaw("feed.gold.spend"),
             (name, nameHex), (Amt(-e.Delta, "gold"), HexGoldSpend), (src, HexEvent));
     }
 
@@ -302,9 +302,19 @@ public class CombatLogPanel : Control
         if (raw.StartsWith("@event:", StringComparison.Ordinal))
             return LookupVanilla("events", raw.Substring("@event:".Length) + ".title", raw.Substring("@event:".Length));
         if (raw.StartsWith("@relic:", StringComparison.Ordinal))
-            return LookupVanilla("relics", raw.Substring("@relic:".Length) + ".title", raw.Substring("@relic:".Length));
+        {
+            string entry = SlugifyRelicEntry(raw.Substring("@relic:".Length));
+            return LookupVanilla("relics", entry + ".title", entry);
+        }
         return raw;
     }
+
+    // Vanilla relic loc keys are SCREAMING_SNAKE_CASE (e.g. BURNING_BLOOD),
+    // produced by StringHelper.Slugify on the model class name. Patches emit
+    // the class name verbatim (@relic:BurningBlood); slugify here so the
+    // vanilla loc lookup hits and the fallback also splits cleanly.
+    private static string SlugifyRelicEntry(string s) =>
+        System.Text.RegularExpressions.Regex.Replace(s.Trim(), "([a-z0-9])([A-Z])", "$1_$2").ToUpperInvariant();
 
     private static string LookupVanilla(string table, string key, string fallbackEntry)
     {

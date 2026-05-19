@@ -4,21 +4,22 @@ using HarmonyLib;
 namespace SoulLinkMod.Patches;
 
 /// <summary>
-/// Suppresses VGQ broadcast during BurningBlood.AfterCombatVictory.
-/// The heal is deterministic (fires on every peer), so local HpSyncPatch handles it.
+/// Suppresses VGQ broadcast during AncientEventModel.BeforeEventStarted.
+/// The heal-to-80% (WearyTraveler ascension) fires per-peer (once per player creature),
+/// so only the first peer's heal should land on the shared pool.
 /// </summary>
 [HarmonyPatch]
-public static class BurningBloodSoulLinkPatch
+public static class AncientEventHealSoulLinkPatch
 {
     static MethodBase TargetMethod() =>
-        AccessTools.Method("MegaCrit.Sts2.Core.Models.Relics.BurningBlood:AfterCombatVictory");
+        AccessTools.Method("MegaCrit.Sts2.Core.Models.AncientEventModel:BeforeEventStarted");
 
     [HarmonyPrefix]
     static void Prefix()
     {
         if (!SoulLinkSession.IsActive) return;
         SoulLinkMod.SuppressVgqEnqueue = true;
-        SoulLinkSession.PendingSource = "@relic:BurningBlood";
+        SoulLinkSession.PendingSource = "@event:AncientHeal";
         SoulLinkSession.BeginPerPeerHeal();
     }
 

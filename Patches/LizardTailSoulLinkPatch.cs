@@ -30,6 +30,11 @@ public static class LizardTailSoulLinkPatch
         if (SoulLinkSession.ActiveRunSettings.HpMode != HpMode.SharedPool) return;
         if (__instance.WasUsed) return;
 
+        // Only intercede for player teammates. Non-player teammate creatures
+        // (e.g. companions like Osty that are killed by card effects such as
+        // Bone Shards) must be allowed to die without consuming the relic.
+        if (!creature.IsPlayer) return;
+
         var owner = __instance.Owner?.Creature;
         if (owner == null || owner == creature) return;
         if (owner.CombatState == null) return;

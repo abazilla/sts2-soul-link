@@ -30,6 +30,14 @@ public static class SoulLinkSession
     /// <summary>Canonical gold for SharedPool mode. Not used in Default or SplitByPlayer modes.</summary>
     public static int Gold       { get; private set; }
 
+    /// <summary>
+    /// True when the current run was restored from a save (vs freshly launched).
+    /// Set in OnRunStart; consulted by ReinitSharedGold to decide whether each player's
+    /// stored Gold field is a mirrored pool value (save-load) or an independent per-player
+    /// value (fresh run, before SharedPool took over).
+    /// </summary>
+    public static bool IsSaveLoadedRun { get; private set; }
+
     /// <summary>Per-player canonical gold for SplitByPlayer mode (indexed by player slot).</summary>
     private static readonly int[] _playerGold = new int[4];
 
@@ -179,11 +187,25 @@ public static class SoulLinkSession
     public static string? PendingSource { get; set; }
 
     /// <summary>
-    /// True while a deterministic per-peer heal is firing (e.g. BurningBlood.AfterCombatVictory).
-    /// Each peer's relic fires locally, producing N CurrentHp setter calls. ApplyHpDelta scales
-    /// each by 1/playerCount so the total pool gain equals the relic's nominal value, not N×.
+    /// True while a deterministic per-peer heal is firing (e.g. BurningBlood.AfterCombatVictory,
+    /// AncientEventModel.BeforeEventStarted act-transition heal). Each player's instance fires
+    /// locally, producing N CurrentHp setter calls. ApplyHpDelta lets only the first positive
+    /// delta through and suppresses duplicates so the pool gains the heal exactly once.
     /// </summary>
     public static bool PerPeerDeterministicHeal { get; set; }
+
+    // Tracks whether a heal has already landed during the current PerPeerDeterministicHeal window.
+    // Set true on first positive ApplyHpDelta while flag is active; reset by BeginPerPeerHeal.
+    private static bool _deterministicHealApplied;
+
+    /// <summary>
+    /// Call before setting PerPeerDeterministicHeal = true to reset the dedup tracker.
+    /// </summary>
+    public static void BeginPerPeerHeal()
+    {
+        _deterministicHealApplied = false;
+        PerPeerDeterministicHeal = true;
+    }
 
     // Set when entering a room and cleared on exit. Used as a persistent source label
     // for the whole room (e.g. "Neow", "Rest Site", "Shop") so multi-step events
@@ -336,10 +358,17 @@ public static class SoulLinkSession
         for (int i = runState.Players.Count; i < _playerGold.Length; i++)
             _playerGold[i] = 0;
 
+        IsSaveLoadedRun = isSaveLoad;
+
         switch (ActiveRunSettings.GoldMode)
         {
             case GoldSharingMode.SharedPool:
-                Gold = runState.Players[0].Gold; // all players start with same gold
+                // Save-load: each player.Gold already mirrors the saved pool value
+                // (ApplyToAllPlayers wrote it before save), so take a single player's value.
+                // Fresh run: pool = sum of every player's starting gold (e.g. 99 * N).
+                Gold = isSaveLoad
+                    ? runState.Players[0].Gold
+                    : RoundedSum(runState.Players, p => p.Gold);
                 break;
             default: // Default and SplitByPlayer: Gold field unused
                 Gold = 0;
@@ -381,9 +410,11 @@ public static class SoulLinkSession
         Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
         PendingSource             = null;
         PerPeerDeterministicHeal  = false;
+        _deterministicHealApplied = false;
         CurrentRoomSource         = null;
         ActiveRunSettings         = default;
         PendingSyncedRunSettings  = null;
+        IsSaveLoadedRun           = false;
         _log.Clear();
         TotalDamageTaken   = 0;
         TotalHealingGained = 0;
@@ -421,6 +452,18 @@ public static class SoulLinkSession
             return CurrentHp;
 
         int delta = rawDelta;
+
+        // Per-peer deterministic heal dedup: only the first peer's positive delta
+        // lands on the pool. Subsequent peers' identical heals are suppressed.
+        if (PerPeerDeterministicHeal && delta > 0)
+        {
+            if (_deterministicHealApplied)
+            {
+                SoulLinkLog.Debug($"[ApplyHpDelta] Suppressing duplicate per-peer heal: delta={delta} pool={CurrentHp}");
+                return CurrentHp;
+            }
+            _deterministicHealApplied = true;
+        }
 
         // The first time a combat HP change fires, we know initialization is complete.
         if (inCombat) _initPhaseComplete = true;
@@ -627,7 +670,12 @@ public static class SoulLinkSession
     internal static void ReinitSharedGold(RunState runState)
     {
         if (runState.Players.Count == 0) return;
-        Gold = runState.Players[0].Gold;
+        // Save-load: every player.Gold mirrors the saved pool — take a single value.
+        // Fresh run / mid-run mode switch: each player holds an independent amount
+        // (vanilla per-player or SplitByPlayer pots), so combine them into the pool.
+        Gold = IsSaveLoadedRun
+            ? runState.Players[0].Gold
+            : RoundedSum(runState.Players, p => p.Gold);
         // Mirror canonical to every player so they're consistent.
         SoulLinkMod.ApplyingCanonical = true;
         try { foreach (var p in runState.Players) p.Gold = Gold; }

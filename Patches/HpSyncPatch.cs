@@ -48,14 +48,21 @@ public static class HpSyncPatch
                 break;
             }
         }
-        if (playerSlot < 0) return true;
+        if (playerSlot < 0)
+        {
+            if (SoulLinkMod.IsCombatActive())
+            {
+                int monDelta = value - __instance.CurrentHp;
+                if (monDelta != 0)
+                    SoulLinkLog.Info($"[MonHp] target={__instance.Name} hpBefore={__instance.CurrentHp} delta={monDelta} hpAfter={value}");
+            }
+            return true;
+        }
 
         int delta = value - __instance.CurrentHp;
         if (delta == 0) return true;
 
         bool isLocalPlayer = LocalContext.IsMe(runState.Players[playerSlot]);
-        SoulLinkLog.Debug($"[HpSync] Prefix: slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.CurrentHp}");
-
         bool inCombat = SoulLinkMod.IsCombatActive();
         int playerCount = runState.Players.Count;
 
@@ -100,12 +107,15 @@ public static class HpSyncPatch
             ?? (inCombat ? "@source:combat" : "@source:out_of_combat");
         SoulLinkSession.PendingSource = null;
 
+        SoulLinkLog.Info($"[HpSync] slot={playerSlot} delta={delta} isLocal={isLocalPlayer} poolBefore={SoulLinkSession.CurrentHp} source={source} inCombat={inCombat}");
+
         // VGQ path owns the apply on every peer via ExecuteAction. Patch only
         // detects + enqueues on the originating peer. Skip local mutation entirely
         // to avoid double-apply when VGQ executes.
         bool useVgqBroadcast = FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
             && SoulLinkSession.IsInitPhaseComplete
-            && !inCombat;
+            && !inCombat
+            && !SoulLinkMod.SuppressVgqEnqueue;
         if (useVgqBroadcast)
         {
             if (isLocalPlayer)
@@ -156,7 +166,8 @@ public static class HpSyncPatch
         // MNA path: Use Mod Net Action pipeline (transitional, to be deprecated)
         if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions)
             && SoulLinkSession.IsInitPhaseComplete
-            && !inCombat)
+            && !inCombat
+            && !SoulLinkMod.SuppressVgqEnqueue)
         {
             if (isLocalPlayer)
             {

@@ -77,6 +77,20 @@ public static class Loc
     }
 
     /// <summary>
+    /// Raw template fetch — bypasses SmartFormat. Use when the template contains
+    /// <c>{0}, {1}, ...</c> positional placeholders that a caller-side parser
+    /// (not SmartFormat) will expand. SmartFormat treats <c>{N}</c> as a named
+    /// selector "N" and errors with "No source extension could handle selector
+    /// named 'N'" when no source provides it.
+    /// </summary>
+    public static string TRaw(string key)
+    {
+        LocTableLoader.EnsureLoaded();
+        try { return new LocString(Table, KeyPrefix + key).GetRawText(); }
+        catch { return key; }
+    }
+
+    /// <summary>
     /// LocString form for APIs that want one (e.g. <c>HoverTip</c> title).
     /// Resolution is deferred — the consuming control re-resolves on each render,
     /// so a locale switch updates the displayed text without rebuilding the control.

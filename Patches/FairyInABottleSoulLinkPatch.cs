@@ -25,6 +25,11 @@ public static class FairyInABottleSoulLinkPatch
         if (!SoulLinkSession.IsActive) return;
         if (SoulLinkSession.ActiveRunSettings.HpMode != HpMode.SharedPool) return;
 
+        // Only intercede for player teammates. Non-player teammate creatures
+        // (e.g. companions like Osty that are killed by card effects such as
+        // Bone Shards) must be allowed to die without consuming the potion.
+        if (!creature.IsPlayer) return;
+
         var owner = __instance.Owner?.Creature;
         if (owner == null || owner == creature) return;
         if (owner.CombatState == null) return;
