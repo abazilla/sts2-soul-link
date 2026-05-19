@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Threading.Tasks;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Events;
@@ -30,7 +31,7 @@ public static class AncientEventHealSoulLinkPatch
         AccessTools.Method("MegaCrit.Sts2.Core.Models.AncientEventModel:BeforeEventStarted");
 
     [HarmonyPrefix]
-    static bool Prefix(AncientEventModel __instance)
+    static bool Prefix(AncientEventModel __instance, ref Task __result)
     {
         if (!SoulLinkSession.IsActive) return true;
         if (__instance is Neow) return true;
@@ -39,6 +40,7 @@ public static class AncientEventHealSoulLinkPatch
         if (_lastAppliedEventId == eventId)
         {
             SoulLinkLog.Debug($"[AncientHealPatch] Skipping duplicate peer heal for event {eventId}");
+            __result = Task.CompletedTask;
             return false;
         }
 
