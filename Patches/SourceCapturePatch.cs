@@ -136,5 +136,9 @@ static class RoomExitSourceClearPatch
     }
 
     [HarmonyPostfix]
-    static void Postfix() => SoulLinkSession.CurrentRoomSource = null;
+    static void Postfix()
+    {
+        SoulLinkSession.CurrentRoomSource = null;
+        AncientEventHealSoulLinkPatch._lastAppliedEventId = null;
+    }
 }

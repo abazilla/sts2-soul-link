@@ -411,6 +411,7 @@ public static class SoulLinkSession
         PendingSource             = null;
         PerPeerDeterministicHeal  = false;
         _deterministicHealApplied = false;
+        Patches.AncientEventHealSoulLinkPatch._lastAppliedEventId = null;
         CurrentRoomSource         = null;
         ActiveRunSettings         = default;
         PendingSyncedRunSettings  = null;
