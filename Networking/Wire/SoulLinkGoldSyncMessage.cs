@@ -27,6 +27,7 @@ public struct SoulLinkGoldSyncMessage : INetMessage, IPacketSerializable
     public bool ShouldBroadcast => false;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
+    public bool ShouldBuffer => true;
 
     public void Serialize(PacketWriter writer)
     {

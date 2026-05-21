@@ -9,6 +9,13 @@
     <AssemblyName>SoulLink</AssemblyName>
     <ModsPath Condition="'$(ModsPath)' == ''">$(STS2GameDir)\mods</ModsPath>
     <DefaultItemExcludes>$(DefaultItemExcludes);issues/**</DefaultItemExcludes>
+    <!-- Which game-assembly snapshot to compile against. deploy.sh beta mode passes /p:DllSourceDir=libs/<snapshot>;
+         default is the live Steam install. MUST be wired into the Reference HintPaths below, or the override is ignored. -->
+    <DllSourceDir Condition="'$(DllSourceDir)' == ''">$(STS2GameDir)/data_sts2_windows_x86_64</DllSourceDir>
+    <!-- Pin reference resolution to the HintPath. Without this, RAR's {CandidateAssemblyFiles} can resolve sts2.dll
+         from a stale libs/ snapshot (e.g. v0.103.2 lacking INetMessage.ShouldBuffer), silently compiling against the
+         wrong interface — the impl then doesn't fill the vtable slot and the mod fails to load at runtime. -->
+    <AssemblySearchPaths>{HintPathFromItem};{RawFileName};{TargetFrameworkDirectory}</AssemblySearchPaths>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,8 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Ship locale JSON next to the DLL. LocTableLoader reads these via Assembly.Location. -->
-    <Content Include="Localization\locales\*.json">
+    <!-- Ship locale tables next to the DLL. LocTableLoader reads these via Assembly.Location.
+         Extension is .locjson (not .json) so STS2's recursive mod-manifest scanner ignores
+         them — loose *.json under mods/ is parsed as a mod manifest and rejected for no 'id'. -->
+    <Content Include="Localization\locales\*.locjson">
       <Link>locales\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -26,20 +35,24 @@
 
   <ItemGroup>
     <Reference Include="sts2">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\sts2.dll</HintPath>
+      <HintPath>$(DllSourceDir)/sts2.dll</HintPath>
       <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
     </Reference>
     <Reference Include="GodotSharp">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\GodotSharp.dll</HintPath>
+      <HintPath>$(DllSourceDir)/GodotSharp.dll</HintPath>
       <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\0Harmony.dll</HintPath>
+      <HintPath>$(DllSourceDir)/0Harmony.dll</HintPath>
       <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
     </Reference>
     <Reference Include="Steamworks.NET">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\Steamworks.NET.dll</HintPath>
+      <HintPath>$(DllSourceDir)/Steamworks.NET.dll</HintPath>
       <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
     </Reference>
   </ItemGroup>
 </Project>

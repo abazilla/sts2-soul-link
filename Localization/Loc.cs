@@ -7,7 +7,7 @@ namespace SoulLinkMod.Localization;
 /// Public localization API for Soul Link.
 ///
 /// Strings live in the game's <see cref="LocManager"/> under the <see cref="Table"/>
-/// name; source-of-truth JSON files are at <c>Localization/locales/{lang}.json</c> and
+/// name; source-of-truth JSON files are at <c>Localization/locales/{lang}.locjson</c> and
 /// are merged into <c>LocManager</c> at runtime by <see cref="LocTableLoader"/>.
 ///
 /// Usage:

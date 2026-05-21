@@ -8,7 +8,8 @@ using MegaCrit.Sts2.Core.Localization;
 namespace SoulLinkMod.Localization;
 
 /// <summary>
-/// Reads <c>Localization/locales/{lang}.json</c> files from disk (next to the mod DLL)
+/// Reads <c>Localization/locales/{lang}.locjson</c> files from disk (next to the mod DLL;
+/// extension is .locjson, not .json, so STS2's recursive mod-manifest scanner skips them)
 /// and merges them into the game's <see cref="LocManager"/> under the <see cref="Loc.Table"/>.
 ///
 /// <para>Behavior:</para>
@@ -94,7 +95,7 @@ internal static class LocTableLoader
                 SoulLinkLog.Error($"Loc: active locale '{active}' is not in STS2's known 14-code list — strings may not resolve.");
 
             // Warn on stray locale files that don't match a real game code (typo guard).
-            foreach (var file in Directory.GetFiles(dir, "*.json"))
+            foreach (var file in Directory.GetFiles(dir, "*.locjson"))
             {
                 var loc = Path.GetFileNameWithoutExtension(file);
                 if (!Loc.KnownLocales.Contains(loc))
@@ -104,7 +105,7 @@ internal static class LocTableLoader
             int merged = 0;
             // Merge English first (base), then active locale (overlay) so collisions
             // resolve in the active locale's favor and missing keys fall through to en.
-            foreach (var file in OrderLocaleFiles(Directory.GetFiles(dir, "*.json"), active))
+            foreach (var file in OrderLocaleFiles(Directory.GetFiles(dir, "*.locjson"), active))
             {
                 var locale = Path.GetFileNameWithoutExtension(file);
                 // Skip locale files unrelated to the active session — they'd stomp

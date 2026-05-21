@@ -10,14 +10,20 @@ Localization/
 ├── LocFontResolver.cs    # Kreon + CJK fallback chain
 ├── LocTableLoader.cs     # lazy + locale-change-aware JSON loader
 ├── locales/
-│   ├── eng.json          # source of truth (English) — add keys here first
-│   ├── zhs.json          # Simplified Chinese
+│   ├── eng.locjson       # source of truth (English) — add keys here first
+│   ├── zhs.locjson       # Simplified Chinese
 │   └── …                 # other locales as they're added
 └── README.md             # this file
 ```
 
 The DLL alone is not enough — `locales/` is copied next to the DLL by
 `scripts/deploy*.sh` and read at runtime via `Assembly.Location`.
+
+**Extension is `.locjson`, not `.json`.** The files are still JSON. STS2's
+`ModManager.ReadModsInDirRecursive` parses *every* `*.json` under `mods/` as a
+mod manifest and rejects ours ("missing the 'id' field"). The 4-char `*.json`
+glob can't match `.locjson`, so the scanner skips them; `LocTableLoader` globs
+`*.locjson` explicitly. Do not rename them back to `.json`.
 
 ## Locale codes
 
@@ -107,7 +113,7 @@ successful load. When the user changes language:
 
 ## Adding a language
 
-1. Copy `locales/eng.json` to `locales/{game_code}.json` (e.g. `jpn.json`).
+1. Copy `locales/eng.locjson` to `locales/{game_code}.locjson` (e.g. `jpn.locjson`).
 2. Translate every value. Leave English in for keys you can't translate yet —
    missing keys fall back to `eng.json`.
 3. Make sure `LocFontResolver` can find a font that renders your script.
