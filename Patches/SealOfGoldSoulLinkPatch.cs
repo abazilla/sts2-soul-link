@@ -1,6 +1,9 @@
+using System.Linq;
 using System.Threading.Tasks;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.VGQ;
@@ -8,18 +11,11 @@ using SoulLinkMod.VGQ;
 namespace SoulLinkMod.Patches;
 
 /// <summary>
-/// Bypasses vanilla <see cref="SealOfGold.AfterSideTurnStart"/> when shared gold is
-/// active. The vanilla path calls <c>PlayerCmd.LoseGold</c>, which routes through
-/// <c>GoldSyncPatch</c> → <c>RequestEnqueueGoldChange</c>. <c>RequestEnqueue</c>
-/// executes synchronously on the host (advancing an extra checksum slot inside the
-/// hook) but is delivered later as a network message to clients — the off-by-one
-/// causes a checksum divergence on the next turn-start.
-///
-/// VGQ-aligned fix: every peer enqueues an identical
-/// <see cref="SoulLinkSealOfGoldGameAction"/> via
-/// <c>ActionQueueSet.EnqueueWithoutSynchronizing</c> from inside the deterministic
-/// hook. No host→client broadcast, identical queue position on every peer,
-/// gold + energy applied in a single ExecuteAction.
+/// Suppresses vanilla <see cref="SealOfGold.AfterSideTurnStart"/> on every peer when
+/// shared-gold is active. Per-peer hooks fire only for locally-owned relics, so any
+/// per-peer enqueue path produces divergent action IDs across peers (same id label,
+/// different action). All enqueues are funneled through a single host-only orchestrator
+/// in <see cref="SealOfGoldHostOrchestratorPatch"/>.
 /// </summary>
 [HarmonyPatch(typeof(SealOfGold), nameof(SealOfGold.AfterSideTurnStart))]
 public static class SealOfGoldSoulLinkPatch
@@ -32,52 +28,66 @@ public static class SealOfGoldSoulLinkPatch
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)) return true;
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.GoldSharing)) return true;
 
-        var owner = __instance.Owner;
-        if (owner == null || side != owner.Creature.Side)
-        {
-            __result = Task.CompletedTask;
-            return false;
-        }
-
-        int goldCost = __instance.DynamicVars.Gold.IntValue;
-        int energyGain = __instance.DynamicVars.Energy.BaseValue;
-
-        int canonicalGold = SoulLinkSession.ActiveRunSettings.GoldMode == GoldSharingMode.SplitByPlayer
-            ? SoulLinkSession.GetPlayerGold(ResolveSlot(owner))
-            : SoulLinkSession.Gold;
-        if (canonicalGold < goldCost)
-        {
-            __result = Task.CompletedTask;
-            return false;
-        }
-
-        int slot = ResolveSlot(owner);
-        if (slot < 0)
-        {
-            __result = Task.CompletedTask;
-            return false;
-        }
-
-        __instance.Flash();
-
-        var action = new SoulLinkSealOfGoldGameAction(slot,
-            SoulLinkSession.ActiveRunSettings.GoldMode, goldCost, energyGain);
-
-        // Per-peer enqueue: every peer runs this hook deterministically with identical
-        // pre-state, so each ActionQueueSet bumps _nextId in lockstep and the action
-        // lands at the same ID on every machine.
-        RunManager.Instance?.ActionQueueSet?.EnqueueWithoutSynchronizing(action);
-
         __result = Task.CompletedTask;
         return false;
     }
+}
 
-    private static int ResolveSlot(MegaCrit.Sts2.Core.Entities.Players.Player player)
+/// <summary>
+/// Host-only SealOfGold orchestrator. Postfixes <see cref="Hook.AfterSideTurnStart"/>
+/// (single seam, deterministic relative to the action queue, fires once per side-turn).
+/// Host iterates every player, enqueues one <see cref="SoulLinkSealOfGoldGameAction"/>
+/// per SealOfGold owner on the matching side via
+/// <see cref="ActionQueueSynchronizer.RequestEnqueue"/>. Host's RequestEnqueue broadcasts
+/// an <c>ActionEnqueuedMessage</c> with the current message-buffer location, so every
+/// client enqueues the same actions at the same location — identical action IDs across
+/// peers, no checksum divergence.
+/// </summary>
+[HarmonyPatch(typeof(Hook), nameof(Hook.AfterSideTurnStart))]
+public static class SealOfGoldHostOrchestratorPatch
+{
+    [HarmonyPostfix]
+    static void Postfix(CombatState combatState, CombatSide side, ref Task __result)
     {
+        var original = __result;
+        __result = WrapAsync(original, combatState, side);
+    }
+
+    static async Task WrapAsync(Task original, CombatState combatState, CombatSide side)
+    {
+        await original;
+
+        if (!SoulLinkSession.IsActive) return;
+        var goldMode = SoulLinkSession.ActiveRunSettings.GoldMode;
+        if (goldMode == GoldSharingMode.Default) return;
+        if (!FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)) return;
+        if (!FeatureFlagManager.IsEnabled(FeatureFlag.GoldSharing)) return;
+
         var rs = RunManager.Instance?.DebugOnlyGetState();
-        if (rs == null) return -1;
-        for (int i = 0; i < rs.Players.Count; i++)
-            if (rs.Players[i] == player) return i;
-        return -1;
+        if (rs == null || rs.Players.Count == 0) return;
+
+        // Host = peer that owns slot 0. Matches existing RunStartPatch convention.
+        if (!LocalContext.IsMe(rs.Players[0])) return;
+
+        for (int slot = 0; slot < rs.Players.Count; slot++)
+        {
+            var player = rs.Players[slot];
+            if (player?.Creature == null) continue;
+            if (player.Creature.Side != side) continue;
+
+            var seal = player.Relics.FirstOrDefault(r => r is SealOfGold) as SealOfGold;
+            if (seal == null) continue;
+
+            int goldCost = seal.DynamicVars.Gold.IntValue;
+            int energyGain = seal.DynamicVars.Energy.IntValue;
+
+            int canonicalGold = goldMode == GoldSharingMode.SplitByPlayer
+                ? SoulLinkSession.GetPlayerGold(slot)
+                : SoulLinkSession.Gold;
+            if (canonicalGold < goldCost) continue;
+
+            var action = new SoulLinkSealOfGoldGameAction(slot, goldMode, goldCost, energyGain);
+            ActionQueueSynchronizer.RequestEnqueue(action);
+        }
     }
 }

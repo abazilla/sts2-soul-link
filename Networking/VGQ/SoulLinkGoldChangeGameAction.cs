@@ -1,10 +1,8 @@
 using Godot;
-using System;
-using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
-using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Runs;
 using SoulLinkMod.UI;
@@ -103,7 +101,10 @@ public class SoulLinkGoldChangeGameAction : GameAction
             return;
         }
 
-        if (SoulLinkSession.ActiveRunSettings.GoldMode == GoldSharingMode.Default) return;
+        // Use action's captured Mode, not local ActiveRunSettings: settings sync may
+        // not have completed on remote peers, leaving their GoldMode at Default → action
+        // would no-op while originator applied → state diverges.
+        if (Mode == GoldSharingMode.Default) return;
 
         if (!FeatureFlagManager.IsEnabled(FeatureFlag.GoldSharing))
             return;
@@ -192,7 +193,7 @@ public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multi
         return new SoulLinkGoldChangeGameAction(DeltaGold, PlayerSlot, Mode, InCombat, Source);
     }
 
-    public void Serialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketWriter writer)
+    public void Serialize(PacketWriter writer)
     {
         writer.WriteInt(DeltaGold, 32);
         writer.WriteInt(PlayerSlot, 8);
@@ -209,7 +210,7 @@ public struct SoulLinkGoldChangeNetAction : MegaCrit.Sts2.Core.GameActions.Multi
         }
     }
 
-    public void Deserialize(MegaCrit.Sts2.Core.Multiplayer.Serialization.PacketReader reader)
+    public void Deserialize(PacketReader reader)
     {
         DeltaGold = reader.ReadInt(32);
         PlayerSlot = reader.ReadInt(8);

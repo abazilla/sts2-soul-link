@@ -8,6 +8,7 @@ docs/
 .claude/
 .cursor/
 scripts/
+libs/
 
 Local.props
 .mcp.json
