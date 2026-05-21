@@ -133,7 +133,7 @@ public class SoulLinkGoldChangeGameAction : GameAction
         if (Mode == GoldSharingMode.SharedPool)
         {
             // SharedPool: all players share one gold pool
-            canonicalGold = SoulLinkSession.ApplyGoldDelta(DeltaGold, playerCount, PlayerSlot, false, null, Source);
+            canonicalGold = SoulLinkSession.ApplyGoldDelta(DeltaGold, playerCount, PlayerSlot, false, null, Source, Mode);
 
             // Write canonical gold to all player gold fields
             SoulLinkMod.ApplyingCanonical = true;
@@ -153,7 +153,7 @@ public class SoulLinkGoldChangeGameAction : GameAction
         {
             // SplitByPlayer: each player has their own gold, but gains are split
             // This is a more complex mode that requires per-player gold tracking
-            canonicalGold = SoulLinkSession.ApplyGoldDelta(DeltaGold, playerCount, PlayerSlot, false, null, Source);
+            canonicalGold = SoulLinkSession.ApplyGoldDelta(DeltaGold, playerCount, PlayerSlot, false, null, Source, Mode);
 
             SoulLinkMod.ApplyingCanonical = true;
             try

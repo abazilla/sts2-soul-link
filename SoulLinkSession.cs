@@ -365,14 +365,28 @@ public static class SoulLinkSession
             case GoldSharingMode.SharedPool:
                 // Save-load: each player.Gold already mirrors the saved pool value
                 // (ApplyToAllPlayers wrote it before save), so take a single player's value.
-                // Fresh run: pool = sum of every player's starting gold (e.g. 99 * N).
+                // Fresh run: pool = StartingGold * player count. Computed from constants so
+                // every peer gets the same value at OnRunStart without needing a sync —
+                // RunManager.Players[i].Gold for non-local slots isn't reliably populated
+                // here on joiners, which previously produced 99+0+0=99 on the client.
                 Gold = isSaveLoad
                     ? runState.Players[0].Gold
-                    : RoundedSum(runState.Players, p => p.Gold);
+                    : StartingGold * runState.Players.Count;
                 break;
             default: // Default and SplitByPlayer: Gold field unused
                 Gold = 0;
                 break;
+        }
+
+        // Fresh-run SharedPool: mirror the canonical pool to every player.Gold so the UI
+        // shows the pool value (e.g. 297) from frame one instead of each player's local 99
+        // until the next gold event. HP mirroring is still deferred (ascension write race);
+        // gold has no such race, so we push it now.
+        if (!isSaveLoad && ActiveRunSettings.GoldMode == GoldSharingMode.SharedPool)
+        {
+            SoulLinkMod.ApplyingCanonical = true;
+            try { foreach (var p in runState.Players) p.Gold = Gold; }
+            finally { SoulLinkMod.ApplyingCanonical = false; }
         }
 
         // On a save-load keep cumulative totals — the run is continuing, not starting fresh.
@@ -554,9 +568,14 @@ public static class SoulLinkSession
     /// If blocked (e.g. Ectoplasm), the delta is logged but NOT applied.
     /// Returns the canonical gold value that should actually be written to the player.
     /// </summary>
-    public static int ApplyGoldDelta(int delta, int playerCount, int playerSlot, bool blocked, string? blockSource = null, string? source = null)
+    public static int ApplyGoldDelta(int delta, int playerCount, int playerSlot, bool blocked, string? blockSource = null, string? source = null, GoldSharingMode? modeOverride = null)
     {
-        int currentCanonical = ActiveRunSettings.GoldMode == GoldSharingMode.SplitByPlayer
+        // VGQ actions capture mode at host-enqueue time and serialize it. Remote peers
+        // may have stale ActiveRunSettings (settings sync incomplete or rejoin) — fall
+        // back only when no override is passed.
+        var mode = modeOverride ?? ActiveRunSettings.GoldMode;
+
+        int currentCanonical = mode == GoldSharingMode.SplitByPlayer
             ? GetPlayerGold(playerSlot)
             : Gold;
 
@@ -566,7 +585,7 @@ public static class SoulLinkSession
             return currentCanonical;
         }
 
-        switch (ActiveRunSettings.GoldMode)
+        switch (mode)
         {
             case GoldSharingMode.SharedPool:
             {

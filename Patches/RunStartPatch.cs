@@ -473,15 +473,11 @@ public static class RunLaunchPatch
             });
         }
 
-        // Broadcast initial canonical gold to fix any divergence from Neow bonuses or
-        // save-load gold changes that fired before IsActive was set.
-        // Only needed for SharedPool — in SplitByPlayer each machine knows its own player's gold;
-        // in Default STS2 manages gold natively.
-        if (SoulLinkSession.ActiveRunSettings.GoldMode == GoldSharingMode.SharedPool)
-        {
-            RunManager.Instance!.NetService.SendMessage(
-                new SoulLinkGoldSyncMessage { CanonicalGold = SoulLinkSession.Gold });
-        }
+        // No initial-pool broadcast: SharedPool fresh runs derive pool deterministically
+        // (StartingGold * player count) in SoulLinkSession.OnRunStart, and save-loads
+        // restore from the synced runState.Players[0].Gold. Both paths give every peer
+        // the same value without a correction sync — earlier broadcasts raced with
+        // joiner Launch postfix registration on the joiner side.
     }
 }
 

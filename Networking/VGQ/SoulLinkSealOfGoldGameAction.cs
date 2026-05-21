@@ -100,7 +100,7 @@ public class SoulLinkSealOfGoldGameAction : GameAction
         var ownedSeal = owner.Relics.OfType<MegaCrit.Sts2.Core.Models.Relics.SealOfGold>().FirstOrDefault();
         ownedSeal?.Flash();
 
-        int canonical = SoulLinkSession.ApplyGoldDelta(-GoldCost, playerCount, PlayerSlot, false, null, source);
+        int canonical = SoulLinkSession.ApplyGoldDelta(-GoldCost, playerCount, PlayerSlot, false, null, source, Mode);
 
         SoulLinkMod.ApplyingCanonical = true;
         try
