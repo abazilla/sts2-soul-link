@@ -44,9 +44,10 @@ public static class SharedLoseHpHistoryPatch
             // "previous turn" check (RoundNumber + 1 == currentRound) still works.
             var entry = new DamageReceivedEntry(
                 result, teammate, dealer, cardSource,
-                combatState.RoundNumber, combatState.CurrentSide, __instance);
+                combatState.RoundNumber, combatState.CurrentSide, __instance,
+                combatState.Players);
 
-            _addMethod.Invoke(__instance, new object[] { entry });
+            _addMethod.Invoke(__instance, new object[] { combatState, entry });
         }
     }
 }

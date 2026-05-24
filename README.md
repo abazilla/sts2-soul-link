@@ -9,8 +9,8 @@ https://github.com/user-attachments/assets/2958dcbe-a784-4a89-a63a-d1345021a4d7
 ### NOTE! This is a super early release version of the mod, and is nowhere near finished. Nothing is balanced, nor does everything work how you expect it to.
 
 - Shared Health Pool: Health can now be a shared pool between all players.
-    - Changes to Current HP (healing/taking damage), and Max HP will change this shared pool
-    - Split HP Mode: Health changes can also split by # of players (eg `gaining +9 MaxHP in a 2player game -> gain +4 MaxHP to the shared pool`).
+    - Additive Mode: Starting MaxHP is all player's MaxHP added.
+    - Average Mode: Starting MaxHP is all player's MaxHP averaged.
 - Shared Gold Pool: Gold can now be a shared pool between all players.
     - Spending and gaining gold affects the shared pool, and should reflect in the number at the top. Don't be greedy and spend all the gold before your team does :)
 - Logs in the top right to show any events affected by the above options
@@ -27,7 +27,6 @@ https://github.com/user-attachments/assets/f979f3dd-20fa-4303-8427-7a858d756cf1
 ## Known bugs
 
 - (Shared Gold Pool) Event options that cost gold can be selected even if it falls below 0 via other players
-- Values shown on relics/cards/events (particularly around health) do not reflect if the "HP/MaxHP Split toggle" is on
 
 Please let me know about bugs you encounter, or just any opinions on balance/gameplay and such. Keen to hear everyone's thoughts.
 

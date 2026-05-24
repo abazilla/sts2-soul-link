@@ -1,0 +1,20 @@
+{
+  "versions": {
+    "v0.106.0-cb2fbf47": {
+      "captured_utc": "2026-05-22T07:09:24.667837Z",
+      "dlls": {
+        "sts2.dll": "sha256:0359de82d275fcbe97a66e4d40674335d58bbea996787cdcafd15a9ea7f5b752",
+        "GodotSharp.dll": "sha256:0e4897ecdfb31456a97c7d8028dfb8d7dbdc632e2f73fc9b438d7b266a139289",
+        "0Harmony.dll": "sha256:ef1898322c9f5c86dc1b0758b272a9c440823b4a41ca9a0b82a3aa6b3d206387",
+        "Steamworks.NET.dll": "sha256:e1cd0bf2436cefbb8bfcfcc1cea0587e5b9c740769e8340f7b9e9de72785fcf0"
+      },
+      "release_info": {
+        "commit": "cb2fbf47",
+        "version": "v0.106.0",
+        "date": "2026-05-21T16:17:40-07:00",
+        "branch": "v0.106.0",
+        "main_assembly_hash": 1001788235
+      }
+    }
+  }
+}

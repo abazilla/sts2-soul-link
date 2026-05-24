@@ -136,18 +136,41 @@ public static class SoulLinkSession
                 if (!_slotCurrentHpSeeded[i]) { allSeeded = false; break; }
             if (allSeeded)
             {
-                double sum = 0;
-                for (int i = 0; i < _initialCurrentHpSeeds.Length; i++) sum += _initialCurrentHpSeeds[i];
-                int finalHp = ActiveRunSettings.StartingHpMode == StartingHpMode.Additive
-                    ? (int)Math.Min(sum, int.MaxValue)
-                    : (int)Math.Round(sum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
-                CurrentHp = Math.Min(finalHp, MaxHp);
+                bool additiveMode = ActiveRunSettings.StartingHpMode == StartingHpMode.Additive;
+                var rs = RunManager.Instance?.DebugOnlyGetState();
+
+                // CurrentHp pool — from the per-slot post-ascension CurrentHp seeds. Ascension
+                // reduces *starting current HP* (A10 ≈ ×0.8), so these carry that scaling.
+                double hpSum = 0;
+                for (int i = 0; i < _initialCurrentHpSeeds.Length; i++) hpSum += _initialCurrentHpSeeds[i];
+                int aggHp = additiveMode
+                    ? (int)Math.Min(hpSum, int.MaxValue)
+                    : (int)Math.Round(hpSum / _initialCurrentHpSeeds.Length, MidpointRounding.AwayFromZero);
+
+                // MaxHp pool — from each player's Character.StartingHp (their starting MAX HP),
+                // which ascension does NOT scale. Average mode = avg of starting max HP
+                // (e.g. 80 + 70 -> 75); Additive sums. StartingHp is static data, identical on
+                // every peer -> deterministic, no Creature.MaxHp race (0 on a fresh host vs
+                // already-populated on a joiner). Re-derived here (not trusting the OnRunStart
+                // provisional) so MaxHp and CurrentHp share one StartingHpMode read at one
+                // instant and can never disagree on mode.
+                if (rs != null)
+                {
+                    double maxSum = 0;
+                    for (int i = 0; i < rs.Players.Count; i++) maxSum += rs.Players[i].Character.StartingHp;
+                    MaxHp = additiveMode
+                        ? (int)Math.Min(maxSum, int.MaxValue)
+                        : (int)Math.Round(maxSum / rs.Players.Count, MidpointRounding.AwayFromZero);
+                }
+                // else: keep the OnRunStart provisional MaxHp (also StartingHp-based).
+
+                CurrentHp = Math.Min(aggHp, MaxHp);
+                SoulLinkLog.Debug($"[Seed] allSeeded: pool finalised MaxHp={MaxHp} CurrentHp={CurrentHp} (mode={ActiveRunSettings.StartingHpMode}).");
 
                 // Push pool MaxHp + CurrentHp to all creatures now that ascension-scaled
                 // per-slot writes have landed. Done here (not in OnRunStart) because pushing
                 // pool MaxHp before vanilla's CurrentHp init causes vanilla to write
                 // CurrentHp = creature.MaxHp = pool MaxHp, bypassing ascension scaling.
-                var rs = RunManager.Instance?.DebugOnlyGetState();
                 if (rs != null)
                 {
                     SoulLinkMod.ApplyingCanonical = true;
@@ -322,18 +345,23 @@ public static class SoulLinkSession
         }
         else
         {
-            // Fresh run: seed pool MaxHp from the chosen aggregate of each player's character MaxHp
-            // (creatures already carry their starting MaxHp before any ascension scaling
-            // touches CurrentHp). CurrentHp is deferred — captured per-slot by HpSyncPatch
-            // during vanilla's ascension writes, then aggregated once every slot has reported.
+            // Fresh run: BOTH pool MaxHp and CurrentHp are deferred and finalised together at the
+            // allSeeded point in OverwriteCanonicalHp, from the same per-slot post-ascension seeds.
+            // This guarantees every peer derives identical values regardless of when Creature.MaxHp
+            // gets populated or when the host's StartingHpMode sync lands.
+            //
+            // The provisional MaxHp below is computed ONLY from Character.StartingHp — static data
+            // identical on every peer — never Creature.MaxHp (0 on a fresh host but already
+            // ascension-scaled on a joiner: the original divergence). It exists only so the per-slot
+            // CurrentHp seeds aren't clamped before finalisation; allSeeded overwrites it.
             sharedMaxHp = additive
-                ? RoundedSum(runState.Players, p => BestMaxHp(p))
-                : RoundedAverage(runState.Players, p => BestMaxHp(p));
+                ? RoundedSum(runState.Players, p => p.Character.StartingHp)
+                : RoundedAverage(runState.Players, p => p.Character.StartingHp);
             sharedCurrentHp = 0;
             _initPhaseComplete = false;
             Array.Clear(_slotCurrentHpSeeded, 0, _slotCurrentHpSeeded.Length);
             Array.Clear(_initialCurrentHpSeeds, 0, _initialCurrentHpSeeds.Length);
-            SoulLinkLog.Debug($"Fresh run — pool MaxHp seeded to {sharedMaxHp} (additive={additive}); CurrentHp deferred until vanilla's per-peer ascension writes finish.");
+            SoulLinkLog.Debug($"Fresh run — provisional pool MaxHp={sharedMaxHp} (additive={additive}, from StartingHp); MaxHp+CurrentHp finalised at allSeeded.");
         }
 
         // Vanilla HpMode never routes through ApplyHpDelta, so the in-combat trigger that
