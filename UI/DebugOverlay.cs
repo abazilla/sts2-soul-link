@@ -219,10 +219,10 @@ public class DebugOverlay : Control
             return english;
         string key = mode switch
         {
-            HpMode.SharedPool             => "settings.hp_mode.shared_pool",
-            HpMode.Vanilla                => "settings.hp_mode.vanilla",
-            HpMode.SharedBlockSharedPool  => "settings.hp_mode.shared_block_shared_pool",
-            _                             => "",
+            HpMode.SharedPool        => "settings.hp_mode.shared_pool",
+            HpMode.Vanilla           => "settings.hp_mode.vanilla",
+            HpMode.SharedHpAndBlock  => "settings.hp_mode.shared_hp_and_block",
+            _                        => "",
         };
         if (string.IsNullOrEmpty(key)) return english;
         string localized = Loc.T(key);

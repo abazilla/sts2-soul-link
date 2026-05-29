@@ -8,7 +8,7 @@
     <LangVersion>12.0</LangVersion>
     <AssemblyName>SoulLink</AssemblyName>
     <ModsPath Condition="'$(ModsPath)' == ''">$(STS2GameDir)\mods</ModsPath>
-    <DefaultItemExcludes>$(DefaultItemExcludes);issues/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);issues/**;libs/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,19 +26,19 @@
 
   <ItemGroup>
     <Reference Include="sts2">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\sts2.dll</HintPath>
+      <HintPath>$(STS2GameDir)/data_sts2_windows_x86_64/sts2.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="GodotSharp">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\GodotSharp.dll</HintPath>
+      <HintPath>$(STS2GameDir)/data_sts2_windows_x86_64/GodotSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\0Harmony.dll</HintPath>
+      <HintPath>$(STS2GameDir)/data_sts2_windows_x86_64/0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Steamworks.NET">
-      <HintPath>$(STS2GameDir)\data_sts2_windows_x86_64\Steamworks.NET.dll</HintPath>
+      <HintPath>$(STS2GameDir)/data_sts2_windows_x86_64/Steamworks.NET.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

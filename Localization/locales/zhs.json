@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "共享生命池",
       "vanilla": "默认",
-      "shared_block_shared_pool": "共享生命与格挡池"
+      "shared_hp_and_block": "共享生命与格挡池"
     },
     "hp_mode_desc": {
       "shared_pool": "所有玩家共享同一生命池",
       "vanilla": "默认，原版行为",
-      "coming_soon": "敬请期待"
+      "shared_hp_and_block": "敬请期待"
     },
 
     "gold_mode_label": "  金币模式（仅房主）：",

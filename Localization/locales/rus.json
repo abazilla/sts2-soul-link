@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "Общий пул ОЗ",
       "vanilla": "По умолчанию",
-      "shared_block_shared_pool": "Общий пул ОЗ и Блока"
+      "shared_hp_and_block": "Общий пул ОЗ и Блока"
     },
     "hp_mode_desc": {
       "shared_pool": "Общий пул ОЗ для всех игроков",
       "vanilla": "По умолчанию, без изменений",
-      "coming_soon": "Скоро"
+      "shared_hp_and_block": "Скоро"
     },
 
     "gold_mode_label": "  РЕЖИМ ЗОЛОТА (только хост):",

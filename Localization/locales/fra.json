@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "Réserve de PV partagée",
       "vanilla": "Défaut",
-      "shared_block_shared_pool": "Réserve de PV & Bloc partagée"
+      "shared_hp_and_block": "Réserve de PV & Bloc partagée"
     },
     "hp_mode_desc": {
       "shared_pool": "Réserve de PV partagée entre tous les joueurs",
       "vanilla": "Défaut, comportement non modifié",
-      "coming_soon": "Bientôt disponible"
+      "shared_hp_and_block": "Bientôt disponible"
     },
 
     "gold_mode_label": "  MODE OR (hôte uniquement) :",

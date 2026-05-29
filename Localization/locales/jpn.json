@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "HP共有プール",
       "vanilla": "デフォルト",
-      "shared_block_shared_pool": "HP・ブロック共有プール"
+      "shared_hp_and_block": "HP・ブロック共有プール"
     },
     "hp_mode_desc": {
       "shared_pool": "全プレイヤーでHPプールを共有",
       "vanilla": "デフォルト、未改変の動作",
-      "coming_soon": "近日公開"
+      "shared_hp_and_block": "近日公開"
     },
 
     "gold_mode_label": "  ゴールドモード（ホストのみ）：",

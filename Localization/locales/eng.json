@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "Shared HP pool",
       "vanilla": "Default",
-      "shared_block_shared_pool": "Shared HP & Block Pool"
+      "shared_hp_and_block": "Shared HP & Block"
     },
     "hp_mode_desc": {
       "shared_pool": "Shared HP pool across all players",
       "vanilla": "Default, unmodded behavior",
-      "coming_soon": "Coming soon"
+      "shared_hp_and_block": "Shared HP pool AND shared combat block"
     },
 
     "gold_mode_label": "  GOLD MODE (host only):",

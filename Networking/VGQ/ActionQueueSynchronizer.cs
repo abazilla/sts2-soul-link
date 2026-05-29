@@ -77,4 +77,14 @@ public static class ActionQueueSynchronizer
         if (mode == GoldSharingMode.Default) return;
         RequestEnqueue(new SoulLinkGoldChangeGameAction(deltaGold, playerSlot, mode, inCombat, source));
     }
+
+    /// <summary>
+    /// Convenience method for enqueueing shared-block change actions.
+    /// No-ops when shared block isn't active for this run.
+    /// </summary>
+    public static void RequestEnqueueBlockChange(int deltaBlock, int playerSlot, string? source = null)
+    {
+        if (!SoulLinkSession.IsSharedBlockEnabled) return;
+        RequestEnqueue(new SoulLinkBlockChangeGameAction(deltaBlock, playerSlot, source));
+    }
 }

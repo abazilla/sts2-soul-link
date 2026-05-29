@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "Geteilter LP-Pool",
       "vanilla": "Standard",
-      "shared_block_shared_pool": "Geteilter LP- & Block-Pool"
+      "shared_hp_and_block": "Geteilter LP- & Block-Pool"
     },
     "hp_mode_desc": {
       "shared_pool": "Geteilter LP-Pool für alle Spieler",
       "vanilla": "Standard, unverändertes Verhalten",
-      "coming_soon": "Demnächst verfügbar"
+      "shared_hp_and_block": "Demnächst verfügbar"
     },
 
     "gold_mode_label": "  GOLD-MODUS (nur Host):",

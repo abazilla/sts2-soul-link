@@ -180,9 +180,9 @@ public class SoulLinkSettingsPanel : Control
         vbox.AddChild(MakeLabel(Loc.T("settings.hp_mode_label"), ColAccentYellow, 16));
 
         _hpModeOption = new OptionButton { FocusMode = FocusModeEnum.None };
-        _hpModeOption.AddItem(Loc.T("settings.hp_mode.shared_pool"), (int)HpMode.SharedPool);
-        _hpModeOption.AddItem(Loc.T("settings.hp_mode.vanilla"),     (int)HpMode.Vanilla);
-        // _hpModeOption.AddItem("Shared HP & Block Pool",     (int)HpMode.SharedBlockSharedPool);
+        _hpModeOption.AddItem(Loc.T("settings.hp_mode.shared_pool"),       (int)HpMode.SharedPool);
+        _hpModeOption.AddItem(Loc.T("settings.hp_mode.shared_hp_and_block"), (int)HpMode.SharedHpAndBlock);
+        _hpModeOption.AddItem(Loc.T("settings.hp_mode.vanilla"),           (int)HpMode.Vanilla);
         _hpModeOption.AddThemeFontSizeOverride("font_size", 17);
         ApplyOptionButtonAccent(_hpModeOption, ColAccentYellow);
         SoulLinkFont.Apply(_hpModeOption);
@@ -190,20 +190,12 @@ public class SoulLinkSettingsPanel : Control
             var hpModePopup = _hpModeOption.GetPopup();
             SoulLinkFont.Apply(hpModePopup);
             hpModePopup.AddThemeFontSizeOverride("font_size", 17);
-            // Disable SharedBlockSharedPool — not yet implemented.
-            // int sbspIdx = _hpModeOption.GetItemIndex((int)HpMode.SharedBlockSharedPool);
-            // if (sbspIdx >= 0)
-            // {
-            //     _hpModeOption.SetItemDisabled(sbspIdx, true);
-            //     _hpModeOption.SetItemText(sbspIdx, "Shared HP & Block Pool  (coming soon)");
-            // }
         }
         _hpModeOption.ItemSelected += idx =>
         {
             if (_refreshing) return;
             var mode = (HpMode)_hpModeOption.GetItemId((int)idx);
             SoulLinkLog.Debug($"[SyncDiag] Toggled HpMode={mode} isClient={_isClientMode}");
-            if (mode == HpMode.SharedBlockSharedPool) { DoRefresh(); return; } // revert
             SoulLinkSettings.Instance.HpMode = mode;
             SoulLinkSettings.Save();
             if (!_isClientMode) SoulLinkSession.TrySendSettingsSync();
@@ -645,9 +637,9 @@ public class SoulLinkSettingsPanel : Control
 
     private static string HpModeDescriptor(HpMode mode) => mode switch
     {
-        HpMode.Vanilla                => Loc.T("settings.hp_mode_desc.vanilla"),
-        HpMode.SharedBlockSharedPool  => Loc.T("settings.hp_mode_desc.coming_soon"),
-        _                             => Loc.T("settings.hp_mode_desc.shared_pool"),
+        HpMode.Vanilla           => Loc.T("settings.hp_mode_desc.vanilla"),
+        HpMode.SharedHpAndBlock  => Loc.T("settings.hp_mode_desc.shared_hp_and_block"),
+        _                        => Loc.T("settings.hp_mode_desc.shared_pool"),
     };
 
     private static string GoldModeDescriptor(GoldSharingMode mode) => mode switch

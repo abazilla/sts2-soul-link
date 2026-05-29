@@ -21,6 +21,7 @@ public static class VGQSerializationTests
         allPassed &= TestHpChangeNetAction();
         allPassed &= TestMaxHpChangeNetAction();
         allPassed &= TestGoldChangeNetAction();
+        allPassed &= TestBlockChangeNetAction();
 
         if (allPassed)
         {
@@ -208,6 +209,65 @@ public static class VGQSerializationTests
                 SoulLinkLog.Error("[VGQSerializationTests]   ✗ SoulLinkGoldChangeNetAction FAILED");
             }
 
+            return passed;
+        }
+        catch (Exception ex)
+        {
+            SoulLinkLog.Error($"[VGQSerializationTests]   ✗ Exception: {ex.Message}");
+            return false;
+        }
+    }
+
+    public static bool TestBlockChangeNetAction()
+    {
+        SoulLinkLog.Debug("[VGQSerializationTests] Testing SoulLinkBlockChangeNetAction serialization...");
+
+        try
+        {
+            var original = new SoulLinkBlockChangeNetAction
+            {
+                DeltaBlock = 12,
+                PlayerSlot = 2,
+                Source = "Defend",
+            };
+
+            var writer = new PacketWriter();
+            original.Serialize(writer);
+            byte[] buffer = writer.Buffer;
+            int bitPosition = writer.BitPosition;
+
+            var reader = new PacketReader();
+            reader.Reset(buffer);
+            var deserialized = new SoulLinkBlockChangeNetAction();
+            deserialized.Deserialize(reader);
+
+            bool passed = true;
+            passed &= AssertEqual(original.DeltaBlock, deserialized.DeltaBlock, "DeltaBlock");
+            passed &= AssertEqual(original.PlayerSlot, deserialized.PlayerSlot, "PlayerSlot");
+            passed &= AssertEqual(original.Source, deserialized.Source, "Source");
+            passed &= AssertEqual(bitPosition, reader.BitPosition, "BitPosition (no data left)");
+
+            // Null-source round-trip
+            var originalNull = new SoulLinkBlockChangeNetAction
+            {
+                DeltaBlock = -7,
+                PlayerSlot = 0,
+                Source = null,
+            };
+            writer.Reset();
+            originalNull.Serialize(writer);
+            buffer = writer.Buffer;
+            bitPosition = writer.BitPosition;
+            reader.Reset(buffer);
+            var deserializedNull = new SoulLinkBlockChangeNetAction();
+            deserializedNull.Deserialize(reader);
+            passed &= AssertEqual(originalNull.DeltaBlock, deserializedNull.DeltaBlock, "DeltaBlock (null-src)");
+            passed &= AssertEqual(originalNull.PlayerSlot, deserializedNull.PlayerSlot, "PlayerSlot (null-src)");
+            passed &= AssertEqual(originalNull.Source, deserializedNull.Source, "Source (null-src)");
+            passed &= AssertEqual(bitPosition, reader.BitPosition, "BitPosition (null-src)");
+
+            if (passed) SoulLinkLog.Debug("[VGQSerializationTests]   ✓ SoulLinkBlockChangeNetAction PASSED");
+            else        SoulLinkLog.Error("[VGQSerializationTests]   ✗ SoulLinkBlockChangeNetAction FAILED");
             return passed;
         }
         catch (Exception ex)

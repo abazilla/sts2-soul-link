@@ -33,6 +33,12 @@ public static class CombatRoomReadyPatch
     {
         SoulLinkMod.CombatRoomActive = true;
         if (!SoulLinkSession.IsActive) return;
+
+        // Shared block resets to 0 at combat enter. Every peer hits this boundary
+        // locally, so resetting per-peer keeps canonicals lockstep without sync.
+        if (SoulLinkSession.IsSharedBlockEnabled)
+            SoulLinkSession.ResetSharedBlock();
+
         RoomPanelInjector.AddPanels(__instance);
     }
 }

@@ -25,6 +25,7 @@ public struct SoulLinkGoldSyncMessage : INetMessage, IPacketSerializable
     public int PlayerSlot;
 
     public bool ShouldBroadcast => false;
+    public bool ShouldBuffer => false;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 

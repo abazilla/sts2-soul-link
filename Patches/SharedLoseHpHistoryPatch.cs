@@ -3,8 +3,8 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
-using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Models;
 
 namespace SoulLinkMod.Patches;
 
@@ -25,7 +25,7 @@ public static class SharedLoseHpHistoryPatch
     private static readonly MethodInfo _addMethod =
         AccessTools.Method(typeof(CombatHistory), "Add");
 
-    static void Postfix(CombatHistory __instance, CombatState combatState, Creature receiver,
+    static void Postfix(CombatHistory __instance, ICombatState combatState, Creature receiver,
         Creature? dealer, DamageResult result, CardModel? cardSource)
     {
         if (!SoulLinkSession.IsActive) return;
@@ -39,14 +39,11 @@ public static class SharedLoseHpHistoryPatch
             if (!teammate.IsPlayer) continue;
             if (!teammate.IsAlive) continue;
 
-            // Add a mirrored entry with the teammate as the receiver.
-            // Same round number and side as the original — so EmotionChip's
-            // "previous turn" check (RoundNumber + 1 == currentRound) still works.
             var entry = new DamageReceivedEntry(
                 result, teammate, dealer, cardSource,
-                combatState.RoundNumber, combatState.CurrentSide, __instance);
+                combatState.RoundNumber, combatState.CurrentSide, __instance, combatState.Players);
 
-            _addMethod.Invoke(__instance, new object[] { entry });
+            _addMethod.Invoke(__instance, new object[] { combatState, entry });
         }
     }
 }

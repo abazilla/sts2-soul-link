@@ -45,6 +45,20 @@ public static class SoulLinkSession
     public static int GetPlayerGold(int slot) =>
         slot >= 0 && slot < _playerGold.Length ? _playerGold[slot] : 0;
 
+    // ── Canonical shared block pool ───────────────────────────────────────────
+
+    /// <summary>
+    /// Canonical combat block pool. Active when
+    /// <see cref="ActiveRunSettings"/>.HpMode == <see cref="HpMode.SharedHpAndBlock"/>.
+    /// Mirrored to every peer's <c>creature.Block</c>; resets to 0 on combat enter.
+    /// In-combat only; not serialised. See ADR-0002.
+    /// </summary>
+    public static int SharedBlock { get; private set; }
+
+    /// <summary>True when shared block is active for this run.</summary>
+    public static bool IsSharedBlockEnabled =>
+        ActiveRunSettings.HpMode == HpMode.SharedHpAndBlock;
+
     // ── Active run settings ───────────────────────────────────────────────────
 
     /// <summary>
@@ -414,6 +428,7 @@ public static class SoulLinkSession
         IsActive                  = false;
         CurrentHp                 = 0;
         MaxHp                     = 0;
+        SharedBlock               = 0;
         Gold                      = 0;
         for (int i = 0; i < _playerGold.Length; i++)
             _playerGold[i] = 0;
@@ -628,6 +643,29 @@ public static class SoulLinkSession
                 // Default mode — GoldSyncPatch returns early before calling here.
                 return 0;
         }
+    }
+
+    // ── Apply Block delta ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Updates the canonical shared block pool by <paramref name="delta"/>, clamped at 0.
+    /// Caller is responsible for mirroring <see cref="SharedBlock"/> to every peer's
+    /// <c>creature.Block</c> under the <see cref="SoulLinkMod.ApplyingCanonical"/> guard.
+    /// Returns the new canonical value.
+    /// </summary>
+    public static int ApplyBlockDelta(int delta, int playerSlot, string? source = null)
+    {
+        SharedBlock = Math.Max(0, SharedBlock + delta);
+        return SharedBlock;
+    }
+
+    /// <summary>
+    /// Zeroes the shared block pool. Called on combat-enter from CombatRoomReadyPatch
+    /// (every peer hits the boundary, so no cross-peer sync required) and at run end.
+    /// </summary>
+    public static void ResetSharedBlock()
+    {
+        SharedBlock = 0;
     }
 
     // ── Write canonical state to all players ─────────────────────────────────

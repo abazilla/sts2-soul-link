@@ -19,8 +19,11 @@ public enum HpMode
     Vanilla = 1,
 
     /// <summary>
-    /// Not yet implemented. Reserved for a future mode where each player has a
-    /// separate HP bar but block is shared. Do not use at runtime.
+    /// Shared HP pool AND shared combat block pool. HP semantics match
+    /// <see cref="SharedPool"/>; additionally, block gained by any peer goes into a
+    /// single canonical pool (<c>SoulLinkSession.SharedBlock</c>) mirrored to every
+    /// peer's <c>creature.Block</c>. Coupled — shared block requires shared HP.
+    /// See ADR-0002.
     /// </summary>
-    SharedBlockSharedPool = 2,
+    SharedHpAndBlock = 2,
 }

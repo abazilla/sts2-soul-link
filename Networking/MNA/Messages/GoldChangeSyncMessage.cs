@@ -13,6 +13,7 @@ public struct GoldChangeSyncMessage : INetMessage, IPacketSerializable
     public long Timestamp;
 
     public bool ShouldBroadcast => true;
+    public bool ShouldBuffer => false;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Debug;
 

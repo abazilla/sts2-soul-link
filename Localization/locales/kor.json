@@ -10,12 +10,12 @@
     "hp_mode": {
       "shared_pool": "체력 공유 풀",
       "vanilla": "기본",
-      "shared_block_shared_pool": "체력 및 방어도 공유 풀"
+      "shared_hp_and_block": "체력 및 방어도 공유 풀"
     },
     "hp_mode_desc": {
       "shared_pool": "모든 플레이어가 체력 풀을 공유",
       "vanilla": "기본, 미개조 동작",
-      "coming_soon": "출시 예정"
+      "shared_hp_and_block": "출시 예정"
     },
 
     "gold_mode_label": "  골드 모드 (호스트 전용):",
