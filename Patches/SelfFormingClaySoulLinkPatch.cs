@@ -53,7 +53,6 @@ public static class SelfFormingClaySoulLinkPatch
         // Mirror the original effect: apply block-next-turn power to the relic's owner.
         __instance.Flash();
         await PowerCmd.Apply<SelfFormingClayPower>(
-            new ThrowingPlayerChoiceContext(),
             ownerCreature,
             __instance.DynamicVars["BlockNextTurn"].BaseValue,
             ownerCreature,

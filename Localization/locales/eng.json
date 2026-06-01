@@ -31,7 +31,7 @@
     },
 
     "additive_starting_hp": "Additive starting HP",
-    "additive_starting_hp_desc": "Pool starts at [color=#{0}]sum[/color] of all players' starting HP instead of [color=#{0}]average[/color] (easier)",
+    "additive_starting_hp_desc": "Pool starts at [color=#{0}]sum[/color] of all players' starting HP (easier) instead of [color=#{0}]average[/color]",
 
     "panels_label": "  PANELS (local):",
     "show_combat_log": "Show Soul Link Feed",
