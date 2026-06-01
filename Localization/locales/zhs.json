@@ -31,7 +31,7 @@
     },
 
     "additive_starting_hp": "累加初始生命",
-    "additive_starting_hp_desc": "生命池以所有玩家初始生命之[color=#{0}]总和[/color]（更简单）开始，而非[color=#{0}]平均值[/color]",
+    "additive_starting_hp_desc": "生命池以所有玩家初始生命之[color=#{0}]总和[/color]开始，而非[color=#{0}]平均值[/color]（更简单）",
 
     "panels_label": "  面板（本地）：",
     "show_combat_log": "显示灵魂链接战报",

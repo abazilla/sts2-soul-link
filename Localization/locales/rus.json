@@ -31,7 +31,7 @@
     },
 
     "additive_starting_hp": "Суммарное стартовое ОЗ",
-    "additive_starting_hp_desc": "Пул начинается с [color=#{0}]суммы[/color] стартового ОЗ всех игроков (легче) вместо [color=#{0}]среднего[/color]",
+    "additive_starting_hp_desc": "Пул начинается с [color=#{0}]суммы[/color] стартового ОЗ всех игроков вместо [color=#{0}]среднего[/color] (легче)",
 
     "panels_label": "  ПАНЕЛИ (локально):",
     "show_combat_log": "Показывать ленту Soul Link",

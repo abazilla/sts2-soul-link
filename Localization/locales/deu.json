@@ -31,7 +31,7 @@
     },
 
     "additive_starting_hp": "Additive Start-LP",
-    "additive_starting_hp_desc": "Pool startet mit [color=#{0}]Summe[/color] der Start-LP aller Spieler (einfacher) statt [color=#{0}]Durchschnitt[/color]",
+    "additive_starting_hp_desc": "Pool startet mit [color=#{0}]Summe[/color] der Start-LP aller Spieler statt [color=#{0}]Durchschnitt[/color] (einfacher)",
 
     "panels_label": "  PANELS (lokal):",
     "show_combat_log": "Soul Link Feed anzeigen",

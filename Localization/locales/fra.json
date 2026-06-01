@@ -31,7 +31,7 @@
     },
 
     "additive_starting_hp": "PV de départ additifs",
-    "additive_starting_hp_desc": "La réserve commence à la [color=#{0}]somme[/color] des PV de départ de tous les joueurs (plus facile) au lieu de la [color=#{0}]moyenne[/color]",
+    "additive_starting_hp_desc": "La réserve commence à la [color=#{0}]somme[/color] des PV de départ de tous les joueurs au lieu de la [color=#{0}]moyenne[/color] (plus facile)",
 
     "panels_label": "  PANNEAUX (local) :",
     "show_combat_log": "Afficher le Flux Soul Link",

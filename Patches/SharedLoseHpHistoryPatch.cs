@@ -25,7 +25,7 @@ public static class SharedLoseHpHistoryPatch
     private static readonly MethodInfo _addMethod =
         AccessTools.Method(typeof(CombatHistory), "Add");
 
-    static void Postfix(CombatHistory __instance, CombatState combatState, Creature receiver,
+    static void Postfix(CombatHistory __instance, ICombatState combatState, Creature receiver,
         Creature? dealer, DamageResult result, CardModel? cardSource)
     {
         if (!SoulLinkSession.IsActive) return;
@@ -41,9 +41,9 @@ public static class SharedLoseHpHistoryPatch
 
             var entry = new DamageReceivedEntry(
                 result, teammate, dealer, cardSource,
-                combatState.RoundNumber, combatState.CurrentSide, __instance);
+                combatState.RoundNumber, combatState.CurrentSide, __instance, combatState.Players);
 
-            _addMethod.Invoke(__instance, new object[] { entry });
+            _addMethod.Invoke(__instance, new object[] { combatState, entry });
         }
     }
 }
