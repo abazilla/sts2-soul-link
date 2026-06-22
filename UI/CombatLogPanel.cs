@@ -280,6 +280,10 @@ public class CombatLogPanel : Control
             return RenderTemplate(
                 hasSrc ? Loc.TRaw("feed.gold.gain_from") : Loc.TRaw("feed.gold.gain"),
                 (name, nameHex), (Amt(e.Delta, "gold"), HexGoldGain), (src, HexEvent));
+        // Enemy steal: "{2} stole {1} from {0}" — attacker tagged via @steal: marker.
+        if (e.Source != null && e.Source.StartsWith("@steal:", StringComparison.Ordinal))
+            return RenderTemplate(Loc.TRaw("feed.gold.stolen_by"),
+                (name, nameHex), (Amt(-e.Delta, "gold"), HexGoldSpend), (src, HexDamage));
         return RenderTemplate(
             hasSrc ? Loc.TRaw("feed.gold.spend_via") : Loc.TRaw("feed.gold.spend"),
             (name, nameHex), (Amt(-e.Delta, "gold"), HexGoldSpend), (src, HexEvent));
@@ -293,6 +297,8 @@ public class CombatLogPanel : Control
     private static string ResolveSource(string? raw)
     {
         if (string.IsNullOrEmpty(raw)) return "";
+        if (raw.StartsWith("@steal:", StringComparison.Ordinal))
+            return raw.Substring("@steal:".Length); // attacker name, verbatim
         if (raw.StartsWith("@source:", StringComparison.Ordinal))
         {
             string key = "feed.source." + raw.Substring("@source:".Length);
@@ -381,7 +387,10 @@ public class CombatLogPanel : Control
 
     private static string ResolveNameUncached(Player player, ulong netId, int slot)
     {
-        string fallback = player.Character.GetType().Name;
+        // Fallback when the platform display name can't be resolved (common in local
+        // multi-instance testing): a slot label like "Player 2", NOT the character type
+        // name — the feed names the player, not their character.
+        string fallback = string.Format(Loc.TRaw("feed.player_fallback"), slot + 1);
         try
         {
             var platform = RunManager.Instance?.NetService?.Platform ?? PlatformUtil.PrimaryPlatform;

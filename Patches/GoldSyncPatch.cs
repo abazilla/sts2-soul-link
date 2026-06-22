@@ -129,12 +129,22 @@ public static class GoldSyncPatch
         if (goldMode == GoldSharingMode.Default) return true;
 
         int playerCount = runState.Players.Count;
+        bool inCombat = SoulLinkMod.IsCombatActive();
 
         // VGQ path owns the apply on every peer via ExecuteAction. The patch only
         // detects the delta on the originating (local-player) peer and enqueues.
         // For non-local-player setters here, do nothing — VGQ will broadcast to us.
+        //
+        // Out-of-combat ONLY. In-combat gold changes (Gremlin Merc steal, gold-on-kill
+        // relics, combat gold cards/events) fire the setter on EVERY peer deterministically
+        // via vanilla's own move/card sync, so each peer can apply inline — no broadcast
+        // needed. Enqueueing a VGQ action mid-move instead added a checksum boundary that
+        // vanilla never had, captured at a non-deterministic point in the real-time monster
+        // move coroutine (gold step vs vanilla weak/damage step), causing state divergence.
+        // Mirrors HpSyncPatch's `!inCombat` gate and BlockSyncPatch's inline-only approach.
         bool useVgqBroadcast = FeatureFlagManager.IsEnabled(FeatureFlag.UseVGQSync)
-            && SoulLinkSession.IsInitPhaseComplete;
+            && SoulLinkSession.IsInitPhaseComplete
+            && !inCombat;
         if (useVgqBroadcast)
         {
             if (LocalContext.IsMe(__instance))
@@ -145,7 +155,6 @@ public static class GoldSyncPatch
                     string? vgqSource = SoulLinkSession.PendingSource
                         ?? SoulLinkSession.CurrentRoomSource;
                     SoulLinkSession.PendingSource = null;
-                    bool inCombat = SoulLinkMod.IsCombatActive();
                     ActionQueueSynchronizer.RequestEnqueueGoldChange(vgqDelta, playerSlot, goldMode, inCombat, vgqSource);
                 }
             }
@@ -171,8 +180,8 @@ public static class GoldSyncPatch
             if (goldMode == GoldSharingMode.SharedPool)
             {
                 int remDelta = value - __instance.Gold;
-                SoulLinkLog.Debug($"[GoldSync] Remote setter slot={playerSlot} curGold={__instance.Gold} newValue={value} remDelta={remDelta} canonicalGold={SoulLinkSession.Gold} networkAppliedCount={_networkApplied.Count}");
                 if (remDelta == 0) return false;
+                SoulLinkLog.Info($"[GoldSync] slot={playerSlot} delta={remDelta} isLocal=False poolBefore={SoulLinkSession.Gold} source={SoulLinkSession.PendingSource ?? SoulLinkSession.CurrentRoomSource} inCombat={inCombat}");
 
                 // GoldSyncHandler already applied this purchase from the network broadcast
                 // before the game's GoldLostMessage fired the setter.  The canonical is
@@ -206,9 +215,16 @@ public static class GoldSyncPatch
                 bool remBlocked = remDelta > 0 && __instance.Relics.Any(r =>
                     r.Id?.Entry == "Ectoplasm");
 
-                string? remSource = SoulLinkSession.PendingSource
-                    ?? SoulLinkSession.CurrentRoomSource;
+                string? remPending = SoulLinkSession.PendingSource;
                 SoulLinkSession.PendingSource = null;
+                string? remSource = remPending ?? SoulLinkSession.CurrentRoomSource;
+
+                // In-combat loss with no explicit source = enemy steal — tag with attacker.
+                if (inCombat && remDelta < 0 && string.IsNullOrEmpty(remPending))
+                {
+                    string? attacker = HpSyncPatch.ResolveActiveAttacker(__instance.Creature, inCombat);
+                    if (!string.IsNullOrEmpty(attacker)) remSource = "@steal:" + attacker;
+                }
 
                 int remCanonical = SoulLinkSession.ApplyGoldDelta(remDelta, playerCount, playerSlot, remBlocked,
                     blockSource: remBlocked ? "Ectoplasm" : null,
@@ -230,7 +246,11 @@ public static class GoldSyncPatch
                 }
 
                 // Enqueue for cancellation so GoldSyncHandler ignores the peer's broadcast.
-                if (!remBlocked)
+                // In combat the local branch sends NO broadcast (deterministic dual-setter
+                // fire — see local-player branch), so there's nothing to cancel; enqueuing
+                // here would poison the dedup dict and wrongly cancel a later out-of-combat
+                // broadcast of the same (slot, delta).
+                if (!remBlocked && !inCombat)
                     EnqueueCancellation(playerSlot, remDelta);
 
                 CombatLogPanel.Current?.Refresh();
@@ -249,9 +269,19 @@ public static class GoldSyncPatch
         bool blocked = delta > 0 && __instance.Relics.Any(r =>
             r.Id?.Entry == "Ectoplasm");
 
-        string? source = SoulLinkSession.PendingSource
-            ?? SoulLinkSession.CurrentRoomSource;
+        string? pending = SoulLinkSession.PendingSource;
         SoulLinkSession.PendingSource = null;
+        string? source = pending ?? SoulLinkSession.CurrentRoomSource;
+
+        // In-combat gold loss with no explicit source = enemy steal (Gremlin Merc THIEVERY).
+        // Tag with the attacking monster so the feed reads "X stole N from <player>".
+        if (inCombat && delta < 0 && string.IsNullOrEmpty(pending))
+        {
+            string? attacker = HpSyncPatch.ResolveActiveAttacker(__instance.Creature, inCombat);
+            if (!string.IsNullOrEmpty(attacker)) source = "@steal:" + attacker;
+        }
+
+        SoulLinkLog.Info($"[GoldSync] slot={playerSlot} delta={delta} isLocal=True poolBefore={SoulLinkSession.Gold} source={source} inCombat={inCombat}");
 
         // Capture pre-call canonical so we can compute the actual applied delta.
         int prevCanonical = goldMode == GoldSharingMode.SplitByPlayer
@@ -286,26 +316,34 @@ public static class GoldSyncPatch
         }
 
         // Broadcast the gold change (legacy paths only; VGQ handled at top of method).
-        // MNA path: Use Mod Net Action pipeline (transitional)
-        if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
+        // Skip in combat: in-combat gold changes fire the setter deterministically on EVERY
+        // peer (vanilla move/card sync), so the remote branch already applied the same delta
+        // in-band. Broadcasting would risk a double-apply race (mirrors HpSyncPatch, which
+        // also suppresses its in-combat broadcast). Out-of-combat with VGQ enabled never
+        // reaches here (handled at top); this fires only as the VGQ-disabled fallback.
+        if (!inCombat)
         {
-            NetActionService.EnqueueLocalAction(new GoldChangeAction
+            // MNA path: Use Mod Net Action pipeline (transitional)
+            if (FeatureFlagManager.IsEnabled(FeatureFlag.NetworkedActions))
             {
-                DeltaGold = broadcastDelta,
-                PlayerSlot = playerSlot,
-                Source = source,
-                WasBlocked = false,
-            }, playerSlot);
-        }
-        // Legacy Wire path: Direct gold sync message (to be deprecated)
-        else
-        {
-            RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
+                NetActionService.EnqueueLocalAction(new GoldChangeAction
+                {
+                    DeltaGold = broadcastDelta,
+                    PlayerSlot = playerSlot,
+                    Source = source,
+                    WasBlocked = false,
+                }, playerSlot);
+            }
+            // Legacy Wire path: Direct gold sync message (to be deprecated)
+            else
             {
-                CanonicalGold = canonical,
-                Delta         = broadcastDelta,
-                PlayerSlot    = playerSlot,
-            });
+                RunManager.Instance?.NetService?.SendMessage(new SoulLinkGoldSyncMessage
+                {
+                    CanonicalGold = canonical,
+                    Delta         = broadcastDelta,
+                    PlayerSlot    = playerSlot,
+                });
+            }
         }
 
         CombatLogPanel.Current?.Refresh();
