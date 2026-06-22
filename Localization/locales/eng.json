@@ -66,6 +66,7 @@
     "header_expanded": "Soul Link Feed v",
     "header_collapsed": "Soul Link Feed >",
     "no_events": "(no events yet)",
+    "player_fallback": "Player {0}",
 
     "unit": {
       "damage": "damage",
@@ -99,6 +100,7 @@
       "gain_from":      "{0} gained {1} from {2}",
       "spend":          "{0} spent {1}",
       "spend_via":      "{0} spent {1} via {2}",
+      "stolen_by":      "{2} stole {1} from {0}",
       "blocked":        "{0} couldn't gain {1} ({2})",
       "default_source": "Relic"
     }
